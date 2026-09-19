@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>原材料价格数据库 - 内审专用</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="原料价格">
+  <link rel="stylesheet" href="style.css?v=2026.09.19-a">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
+</head>
+<body>
+  <div class="app">
+    <!-- 顶部栏 -->
+    <header class="header">
+      <div class="header-left">
+        <h1>📊 原材料价格数据库</h1>
+        <span class="subtitle">内审专用 · 价格波动监控</span>
+      </div>
+      <div class="header-right">
+        <button class="btn btn-sm btn-ghost" id="installBtn" onclick="showInstall()" style="display:none;">⬇ 安装到本地</button>
+      </div>
+    </header>
+
+    <!-- Tab导航 -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="entry" onclick="switchTab('entry')">📝 数据录入</button>
+      <button class="tab" data-tab="list" onclick="switchTab('list')">📋 数据总览</button>
+      <button class="tab" data-tab="trend" onclick="switchTab('trend')">📈 趋势分析</button>
+      <button class="tab" data-tab="stats" onclick="switchTab('stats')">📊 统计概览</button>
+      <button class="tab" data-tab="suppliers" onclick="switchTab('suppliers')">🏢 供应商库</button>
+      <button class="tab" data-tab="materials" onclick="switchTab('materials')">📦 材料库</button>
+    </nav>
+
+    <!-- ============ 数据录入 ============ -->
+    <section class="tab-content active" id="tab-entry">
+      <div class="card">
+        <h2>录入原材料价格</h2>
+        <form id="entryForm" onsubmit="saveRecord(event)">
+          <div class="form-row">
+            <div class="form-group">
+              <label>原材料名称 <span class="req">*</span></label>
+              <input type="text" id="materialName" placeholder="如：冷轧钢板" required list="materialList" onchange="onMaterialNameInput()">
+              <datalist id="materialList"></datalist>
+            </div>
+            <div class="form-group">
+              <label>分类</label>
+              <select id="category">
+                <option value="原材料">原材料</option>
+                <option value="机辅料">机辅料</option>
+                <option value="包装物">包装物</option>
+                <option value="其它">其它</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>计量单位</label>
+              <select id="unit">
+                <option value="吨">吨</option>
+                <option value="千克">千克</option>
+                <option value="米">米</option>
+                <option value="平方米">平方米</option>
+                <option value="个">个</option>
+                <option value="张">张</option>
+                <option value="片">片</option>
+                <option value="台">台</option>
+                <option value="升">升</option>
+                <option value="桶">桶</option>
+                <option value="批">批</option>
+                <option value="套">套</option>
+                <option value="根">根</option>
+                <option value="卷">卷</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>单价（元）<span class="req">*</span></label>
+              <input type="number" id="price" placeholder="如：4500.00" step="0.001" min="0" required>
+            </div>
+            <div class="form-group">
+              <label>采购数量 <span class="req">*</span></label>
+              <input type="number" id="quantity" placeholder="如：100" step="0.01" min="0" required>
+            </div>
+            <div class="form-group">
+              <label>定价时间</label>
+              <input type="date" id="pricingDate">
+            </div>
+            <div class="form-group">
+              <label>供货时间 <span class="req">*</span></label>
+              <input type="date" id="supplyDate" placeholder="该批次原料到货时间">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>供应商</label>
+              <div class="supplier-wrap">
+                <select id="supplierSelect" onchange="onSupplierSelectChange()">
+                  <option value="">请选择或新增供应商</option>
+                </select>
+                <input type="text" id="supplierInput" placeholder="输入新供应商名称" style="display:none">
+                <button type="button" id="supplierToggleBtn" class="btn btn-sm" onclick="toggleSupplierMode()">新增</button>
+              </div>
+            </div>
+            <div class="form-group form-remark">
+              <label>备注</label>
+              <input type="text" id="remark" placeholder="可选，如：含税价/锁价三个月等">
+            </div>
+          </div>
+          <div class="form-row form-actions">
+            <button type="submit" class="btn btn-primary" id="submitBtn">💾 保存</button>
+            <button type="button" class="btn" onclick="resetForm()">清空</button>
+            <button type="button" class="btn btn-danger" id="deleteRecordBtn" onclick="deleteCurrentRecord()" style="display:none;" title="删除当前正在编辑的记录">🗑 删除</button>
+            <span class="form-hint" id="formHint"></span>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ 数据总览 ============ -->
+    <section class="tab-content" id="tab-list">
+      <div class="card">
+        <div class="card-header">
+          <h2>数据总览</h2>
+          <div class="filter-bar">
+            <input type="text" id="searchInput" placeholder="🔍 搜索..." oninput="renderTable()">
+            <select id="filterMaterial" onchange="onMaterialFilterChange()">
+              <option value="">全部原材料</option>
+            </select>
+            <span id="materialUnitReadout" class="filter-unit-readout" style="display:none;"></span>
+            <select id="filterSupplier" onchange="onSupplierFilterChange()">
+              <option value="">全部供应商</option>
+            </select>
+            <select id="filterCategory" onchange="onCategoryFilterChange()">
+              <option value="">全部分类</option>
+            </select>
+            <input type="month" id="filterMonth" onchange="renderTable()">
+            <button class="btn btn-sm" onclick="clearFilters()">清除筛选</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="dataTable">
+            <thead>
+              <tr>
+                <th onclick="sortBy('pricingDate')">定价时间<span class="sort-ind">↕</span></th>
+                <th onclick="sortBy('supplyDate')">供货时间<span class="sort-ind">↕</span></th>
+                <th onclick="sortBy('materialName')">原材料名称<span class="sort-ind">↕</span></th>
+                <th onclick="sortBy('category')">分类<span class="sort-ind">↕</span></th>
+                <th onclick="sortBy('price')">单价(元)<span class="sort-ind">↕</span></th>
+                <th onclick="sortBy('quantity')">数量<span class="sort-ind">↕</span></th>
+                <th>单位</th>
+                <th onclick="sortBy('totalAmount')">金额(元)<span class="sort-ind">↕</span></th>
+                <th>供应商</th>
+                <th>备注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+        <div class="table-footer" id="tableFooter"></div>
+      </div>
+    </section>
+
+    <!-- ============ 趋势分析 ============ -->
+    <section class="tab-content" id="tab-trend">
+      <div class="card">
+        <div class="card-header">
+          <h2>价格波动趋势分析</h2>
+          <div class="filter-bar">
+            <select id="trendMaterial" onchange="renderTrend()">
+              <option value="">请选择原材料</option>
+            </select>
+            <button class="btn btn-sm" onclick="toggleMultiCompare()" id="multiCompareBtn">多材料对比</button>
+          </div>
+        </div>
+
+        <!-- 单材料趋势 -->
+        <div id="singleTrend">
+          <div class="chart-container">
+            <canvas id="trendChart"></canvas>
+          </div>
+          <div class="trend-stats" id="trendStats"></div>
+          <div class="trend-detail" id="trendDetail"></div>
+        </div>
+
+        <!-- 多材料对比 -->
+        <div id="multiCompare" style="display:none;">
+          <div class="multi-select-wrap">
+            <label>选择对比材料（最多5个）：</label>
+            <div id="multiMaterialCheckboxes" class="checkbox-group"></div>
+          </div>
+          <div class="chart-container">
+            <canvas id="compareChart"></canvas>
+          </div>
+          <div class="compare-table-wrap" id="compareTableWrap"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 统计概览 ============ -->
+    <section class="tab-content" id="tab-stats">
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="card">
+        <h2>各材料价格汇总</h2>
+        <div class="table-wrap">
+          <table class="data-table" id="summaryTable">
+            <thead>
+              <tr>
+                <th>原材料</th>
+                <th>分类</th>
+                <th>记录数</th>
+                <th>最新单价</th>
+                <th>上月单价</th>
+                <th>环比变动</th>
+                <th>平均价</th>
+                <th>最高价</th>
+                <th>最低价</th>
+                <th>波动率</th>
+                <th>累计采购额</th>
+              </tr>
+            </thead>
+            <tbody id="summaryBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>月度采购金额趋势</h2>
+        <div class="chart-container">
+          <canvas id="amountChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 供应商库 ============ -->
+    <section class="tab-content" id="tab-suppliers">
+      <div class="card">
+        <div class="card-header">
+          <h2>供应商库</h2>
+          <div class="filter-bar">
+            <input type="text" id="supplierSearch" placeholder="🔍 搜索供应商..." oninput="renderSuppliers()">
+          </div>
+        </div>
+        <div class="stats-grid" id="supplierSummary"></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th onclick="sortSuppliers('name')">供应商<span class="sort-ind">↕</span></th>
+                <th onclick="sortSuppliers('recordCount')">累计供应批次<span class="sort-ind">↕</span></th>
+                <th onclick="sortSuppliers('lastDate')">最近定价时间<span class="sort-ind">↕</span></th>
+                <th onclick="sortSuppliers('totalAmount')">累计采购金额(元)<span class="sort-ind">↕</span></th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="supplierBody"></tbody>
+          </table>
+        </div>
+        <div class="table-footer" id="supplierFooter"></div>
+      </div>
+    </section>
+
+    <!-- ============ 材料库 ============ -->
+    <section class="tab-content" id="tab-materials">
+      <!-- 新增/编辑材料 -->
+      <div class="card">
+        <h2 id="materialFormTitle">新增材料</h2>
+        <form id="materialForm" onsubmit="saveMaterial(event)">
+          <datalist id="unitList">
+            <option value="吨"></option>
+            <option value="千克"></option>
+            <option value="米"></option>
+            <option value="平方米"></option>
+            <option value="个"></option>
+            <option value="张"></option>
+            <option value="片"></option>
+            <option value="台"></option>
+            <option value="升"></option>
+            <option value="桶"></option>
+            <option value="批"></option>
+            <option value="套"></option>
+            <option value="根"></option>
+            <option value="卷"></option>
+          </datalist>
+          <div class="form-row">
+            <div class="form-group">
+              <label>材料名称 <span class="req">*</span></label>
+              <input type="text" id="materialDbName" placeholder="如：冷轧钢板" required>
+            </div>
+            <div class="form-group">
+              <label>所属分类 <span class="req">*</span></label>
+              <select id="materialDbCategory" required>
+                <option value="">请选择分类</option>
+                <option value="原材料">原材料</option>
+                <option value="机辅料">机辅料</option>
+                <option value="包装物">包装物</option>
+                <option value="其它">其它</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>计量单位</label>
+              <input type="text" id="materialDbUnit" list="unitList" placeholder="如：吨 / 千克 / 米">
+            </div>
+            <div class="form-group">
+              <label>使用部门</label>
+              <select id="materialDbDept">
+                <option value="">请选择使用部门</option>
+                <option value="二期">二期</option>
+                <option value="三期">三期</option>
+                <option value="四期">四期</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row form-actions">
+            <button type="submit" class="btn btn-primary" id="materialSubmitBtn">💾 保存</button>
+            <button type="button" class="btn" onclick="resetMaterialForm()">清空</button>
+            <button type="button" class="btn btn-danger" id="deleteMaterialBtn" onclick="deleteCurrentMaterial()" style="display:none;" title="删除当前正在编辑的材料定义（不影响价格记录）">🗑 删除</button>
+            <span class="form-hint" id="materialFormHint"></span>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>材料库</h2>
+          <div class="filter-bar">
+            <input type="text" id="materialSearch" placeholder="🔍 搜索材料..." oninput="renderMaterials()">
+          </div>
+        </div>
+        <div class="stats-grid" id="materialSummary"></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th onclick="sortMaterials('name')">材料名称<span class="sort-ind">↕</span></th>
+                <th onclick="sortMaterials('category')">所属分类<span class="sort-ind">↕</span></th>
+                <th>计量单位</th>
+                <th>使用部门</th>
+                <th onclick="sortMaterials('recordCount')">价格记录数<span class="sort-ind">↕</span></th>
+                <th onclick="sortMaterials('lastDate')">最近定价时间<span class="sort-ind">↕</span></th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="materialBody"></tbody>
+          </table>
+        </div>
+        <div class="table-footer" id="materialFooter"></div>
+      </div>
+    </section>
+
+      <footer class="app-footer">
+        <div class="footer-left">
+          <span>原材料价格数据库</span>
+          <span class="ver-badge" id="appVersion"></span>
+        </div>
+        <div class="footer-right">
+          <button type="button" class="footer-link" onclick="checkUpdate()" title="重新加载页面，获取最新版本">检查更新</button>
+          <details class="footer-menu">
+            <summary>联网同步</summary>
+            <div class="footer-menu-panel">
+              <label class="footer-menu-item sync-toggle">
+                <input type="checkbox" id="syncEnabled" onchange="toggleSync()">
+                <span>开启联网同步</span>
+              </label>
+              <div class="sync-status">状态：<span id="sync-state">未开启</span></div>
+              <button type="button" onclick="manualSync()">立即同步</button>
+            </div>
+          </details>
+          <details class="footer-menu">
+            <summary>数据管理</summary>
+            <div class="footer-menu-panel">
+              <button type="button" onclick="exportCSV()">导出 CSV</button>
+              <button type="button" onclick="exportJSON()">备份数据</button>
+              <label class="footer-menu-item">
+                恢复数据
+                <input type="file" accept=".json" onchange="importJSON(event)" hidden>
+              </label>
+            </div>
+          </details>
+        </div>
+      </footer>
+  </div>
+
+  <!-- 安装引导弹窗 -->
+  <div class="modal-mask" id="installModal" style="display:none;">
+    <div class="modal">
+      <h3>📲 安装到本地（Mac）</h3>
+      <div id="installGuideSafari" style="display:none;">
+        <p>你的浏览器（Safari）需要通过系统菜单安装：</p>
+        <ol class="guide-steps">
+          <li>打开本页面后，点击顶部菜单栏的 <b>「文件」</b></li>
+          <li>选择 <b>「添加到 Dock」</b>（macOS Sonoma 14+）</li>
+          <li>稍候即可在 <b>启动台 / Dock</b> 看到「原料价格」独立应用</li>
+        </ol>
+        <p class="guide-note">旧版 macOS 可用 Chrome 打开本页，点右下角「安装到本地」即可。</p>
+      </div>
+      <div id="installGuideChrome" style="display:none;">
+        <p>检测到你用的是 Chrome / Edge，直接点击下方按钮即可安装为桌面应用：</p>
+        <ol class="guide-steps">
+          <li>点击 <b>「安装应用」</b>，确认后自动生成桌面应用</li>
+          <li>之后可在 <b>启动台 / 应用程序</b> 找到「原料价格」</li>
+        </ol>
+      </div>
+      <div id="installGuideOther" style="display:none;">
+        <p>不同浏览器安装方式略有差异：</p>
+        <ul class="guide-steps">
+          <li><b>Chrome / Edge：</b>地址栏右侧点「安装」图标，或点本页「安装到本地」按钮</li>
+          <li><b>Safari (Mac)：</b>菜单「文件」→「添加到 Dock」</li>
+          <li><b>手机：</b>浏览器「分享」→「添加到主屏幕」</li>
+        </ul>
+      </div>
+      <div class="modal-actions">
+        <button id="installConfirmBtn" class="btn btn-primary" style="display:none;" onclick="triggerInstall()">安装应用</button>
+        <button class="btn" onclick="closeInstallModal()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast提示 -->
+  <div class="toast" id="toast"></div>
+
+  <script src="seed-data.js?v=2026.09.19-a"></script>
+  <script src="app.js?v=2026.09.19-a"></script>
+</body>
+</html>
