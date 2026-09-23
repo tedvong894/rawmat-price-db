@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.09.23-b';
+const APP_VERSION = '2026.09.23-c';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -34,21 +34,21 @@ let materials = loadMaterialDB();
 let editingId = null; // 当前正在编辑的记录id（null=新增模式）
 
 // ===== 定价时间默认值（按「材料::供应商」记忆）=====
-// 规则：非新供应商时，定价时间默认取该组合「上次供货时间」；
+// 规则：非新供应商时，定价时间默认取该组合「上次定价时间」（供货时间与定价时间是不同概念）；
 // 用户手动改过定价时间后，该值即成为后续默认值，直到再次手动修改。
 const PD_DEFAULTS_KEY = 'rm_pricing_date_defaults';
 let pricingDateDefaults = {};
 try { pricingDateDefaults = JSON.parse(localStorage.getItem(PD_DEFAULTS_KEY) || '{}'); } catch (e) { pricingDateDefaults = {}; }
 let pricingDateTouched = false; // 当前表单内用户是否手动改过定价时间
 
-function lastSupplyDate(materialName, supplier) {
+function lastPricingDate(materialName, supplier) {
   const name = (materialName || '').trim();
   const sup = (supplier || '').trim();
   if (!name || !sup) return '';
   let best = '';
   records.forEach(r => {
     if ((r.materialName || '').trim() === name && (r.supplier || '').trim() === sup) {
-      const d = r.supplyDate || r.pricingDate || '';
+      const d = r.pricingDate || '';
       if (d && d > best) best = d;
     }
   });
@@ -58,7 +58,7 @@ function lastSupplyDate(materialName, supplier) {
 function defaultPricingDate(materialName, supplier) {
   const key = (materialName || '').trim() + '::' + (supplier || '').trim();
   if (key && pricingDateDefaults[key]) return pricingDateDefaults[key];
-  return lastSupplyDate(materialName, supplier);
+  return lastPricingDate(materialName, supplier);
 }
 
 function savePricingDateDefault(materialName, supplier, date) {
