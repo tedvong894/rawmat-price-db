@@ -1,12 +1,12 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.09.23-a';
+const APP_VERSION = '2026.09.23-b';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
 const MATERIAL_DB_KEY = 'materialDB';
-const CATEGORIES = ['原材料', '机辅料', '包装物', '其它'];
+const CATEGORIES = ['主材', '机辅料', '包装物', '其它'];
 const isKnownCategory = (c) => CATEGORIES.includes(c);
 
 function loadData() {
@@ -32,6 +32,57 @@ function saveMaterialDB(data) {
 let records = loadData();
 let materials = loadMaterialDB();
 let editingId = null; // 当前正在编辑的记录id（null=新增模式）
+
+// ===== 定价时间默认值（按「材料::供应商」记忆）=====
+// 规则：非新供应商时，定价时间默认取该组合「上次供货时间」；
+// 用户手动改过定价时间后，该值即成为后续默认值，直到再次手动修改。
+const PD_DEFAULTS_KEY = 'rm_pricing_date_defaults';
+let pricingDateDefaults = {};
+try { pricingDateDefaults = JSON.parse(localStorage.getItem(PD_DEFAULTS_KEY) || '{}'); } catch (e) { pricingDateDefaults = {}; }
+let pricingDateTouched = false; // 当前表单内用户是否手动改过定价时间
+
+function lastSupplyDate(materialName, supplier) {
+  const name = (materialName || '').trim();
+  const sup = (supplier || '').trim();
+  if (!name || !sup) return '';
+  let best = '';
+  records.forEach(r => {
+    if ((r.materialName || '').trim() === name && (r.supplier || '').trim() === sup) {
+      const d = r.supplyDate || r.pricingDate || '';
+      if (d && d > best) best = d;
+    }
+  });
+  return best;
+}
+
+function defaultPricingDate(materialName, supplier) {
+  const key = (materialName || '').trim() + '::' + (supplier || '').trim();
+  if (key && pricingDateDefaults[key]) return pricingDateDefaults[key];
+  return lastSupplyDate(materialName, supplier);
+}
+
+function savePricingDateDefault(materialName, supplier, date) {
+  const key = (materialName || '').trim() + '::' + (supplier || '').trim();
+  if (!key) return;
+  pricingDateDefaults[key] = date;
+  localStorage.setItem(PD_DEFAULTS_KEY, JSON.stringify(pricingDateDefaults));
+}
+
+function applyPricingDateDefault() {
+  if (pricingDateTouched) return;
+  const name = document.getElementById('materialName').value.trim();
+  const sup = getSupplierValue();
+  const def = defaultPricingDate(name, sup);
+  if (def) document.getElementById('pricingDate').value = def;
+}
+
+function onPricingDateManualEdit() {
+  pricingDateTouched = true;
+  const name = document.getElementById('materialName').value.trim();
+  const sup = getSupplierValue();
+  const d = document.getElementById('pricingDate').value;
+  if (name && sup && d) savePricingDateDefault(name, sup, d);
+}
 
 // ===== 多端联网同步（Supabase：本地优先、无登录、board 串多端共享） =====
 // 模型与「工作台」一致：本地 localStorage 为权威，保存即防抖推送到云端；
@@ -265,6 +316,7 @@ function saveRecord(e) {
 function resetForm() {
   document.getElementById('entryForm').reset();
   setDefaultDate();
+  pricingDateTouched = false; // 新录入：允许按材料+供应商套用默认定价时间
   setSupplierValue('');
   // 退出编辑模式
   editingId = null;
@@ -360,6 +412,10 @@ function onSupplierSelectChange() {
     input.style.display = 'block';
     input.focus();
     if (btn) btn.textContent = '取消';
+  } else {
+    // 选了已有供应商（非新供应商）→ 定价时间默认取上次供货时间
+    pricingDateTouched = false;
+    applyPricingDateDefault();
   }
 }
 
@@ -925,6 +981,9 @@ function onMaterialNameInput() {
   }
   // 供应商与材料勾稽联动：只保留供应过该材料的供应商
   refreshSupplierList();
+  // 非新供应商时，定价时间默认取上次供货时间
+  pricingDateTouched = false;
+  applyPricingDateDefault();
 }
 
 // ===== 供应商库 =====
@@ -1603,11 +1662,22 @@ function refreshAll() {
   }
 }
 
+// 分类改名：旧「原材料」统一映射到「主材」（材料库与价格记录都改）
+// 每次加载都执行（幂等：改完就没有「原材料」了），确保云端拉回的旧数据也能纠正
+function migrateCategoryRename() {
+  let changed = false;
+  materials.forEach(m => { if (m.category === '原材料') { m.category = '主材'; changed = true; } });
+  records.forEach(r => { if (r.category === '原材料') { r.category = '主材'; changed = true; } });
+  if (changed) { saveMaterialDB(materials); saveData(records); }
+}
+
 // 把非标准分类统一归为「其它」（兼容旧数据/历史导出的数据）
 // 有材料库时，按材料库定义纠正分类
 function normalizeCategories() {
   let changed = false;
   records.forEach(r => {
+    // 分类改名兼容：旧「原材料」统一映射为「主材」（也覆盖云端拉回的旧数据）
+    if (r.category === '原材料') { r.category = '主材'; changed = true; }
     // 先标准化未知分类
     if (!isKnownCategory(r.category)) {
       r.category = '其它';
@@ -1851,6 +1921,7 @@ function checkUpdate() {
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
   setDefaultDate();
+  migrateCategoryRename(); // 旧「原材料」分类统一改「主材」（幂等）
   migrateOldSampleData();
   loadSampleData();
   normalizeCategories();
