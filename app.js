@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.09.19-a';
+const APP_VERSION = '2026.09.23-a';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -700,6 +700,22 @@ function sortMaterials(field) {
   renderMaterials();
 }
 
+// 修改材料库信息后，把同名历史价格记录的 分类/单位/名称 同步成材料库的值（材料库为权威）
+function propagateMaterialToRecords(oldName, newMat) {
+  let count = 0;
+  records.forEach(r => {
+    if ((r.materialName || '').trim() === oldName) {
+      let changed = false;
+      if (r.category !== newMat.category) { r.category = newMat.category; changed = true; }
+      // 材料库有标准单位才覆盖，避免把历史记录的单位清空
+      if (newMat.unit && r.unit !== newMat.unit) { r.unit = newMat.unit; changed = true; }
+      if (r.materialName !== newMat.name) { r.materialName = newMat.name; changed = true; }
+      if (changed) count++;
+    }
+  });
+  return count;
+}
+
 function saveMaterial(e) {
   e.preventDefault();
   const name = document.getElementById('materialDbName').value.trim();
@@ -713,13 +729,20 @@ function saveMaterial(e) {
   }
 
   if (editingMaterialName) {
-    // 编辑模式：更新原有记录
-    const idx = materials.findIndex(m => m.name === editingMaterialName);
+    // 编辑模式：更新材料库，并把改动同步到所有同名历史价格记录
+    const oldName = editingMaterialName;
+    const idx = materials.findIndex(m => m.name === oldName);
     if (idx >= 0) {
       materials[idx] = { name, category, unit, department };
     }
+    const synced = propagateMaterialToRecords(oldName, { name, category, unit, department });
     editingMaterialName = null;
-    showToast('已更新材料', 'success');
+    if (synced > 0) {
+      saveData(records); // 历史记录变更需落盘并触发云端同步
+      showToast(`已更新材料，并同步 ${synced} 条历史记录`, 'success');
+    } else {
+      showToast('已更新材料', 'success');
+    }
   } else {
     // 新增模式
     if (materials.some(m => m.name === name)) {
@@ -1590,11 +1613,18 @@ function normalizeCategories() {
       r.category = '其它';
       changed = true;
     }
-    // 有材料库定义时，强制同步为材料库中的分类
+    // 有材料库定义时，强制同步为材料库中的分类与标准单位
     const dbMat = materials.find(m => m.name === r.materialName);
-    if (dbMat && dbMat.category && r.category !== dbMat.category) {
-      r.category = dbMat.category;
-      changed = true;
+    if (dbMat) {
+      if (dbMat.category && r.category !== dbMat.category) {
+        r.category = dbMat.category;
+        changed = true;
+      }
+      // 材料库有标准单位才覆盖，避免清空历史记录的单位
+      if (dbMat.unit && r.unit !== dbMat.unit) {
+        r.unit = dbMat.unit;
+        changed = true;
+      }
     }
   });
   if (changed) saveData(records);
