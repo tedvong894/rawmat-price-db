@@ -50,7 +50,7 @@
             <div class="form-group">
               <label>分类</label>
               <select id="category">
-                <option value="原材料">原材料</option>
+                <option value="主材">主材</option>
                 <option value="机辅料">机辅料</option>
                 <option value="包装物">包装物</option>
                 <option value="其它">其它</option>
@@ -87,7 +87,7 @@
             </div>
             <div class="form-group">
               <label>定价时间</label>
-              <input type="date" id="pricingDate">
+              <input type="date" id="pricingDate" onchange="onPricingDateManualEdit()">
             </div>
             <div class="form-group">
               <label>供货时间 <span class="req">*</span></label>
@@ -294,7 +294,7 @@
               <label>所属分类 <span class="req">*</span></label>
               <select id="materialDbCategory" required>
                 <option value="">请选择分类</option>
-                <option value="原材料">原材料</option>
+                <option value="主材">主材</option>
                 <option value="机辅料">机辅料</option>
                 <option value="包装物">包装物</option>
                 <option value="其它">其它</option>
@@ -423,6 +423,6 @@
   <div class="toast" id="toast"></div>
 
   <script src="seed-data.js?v=2026.09.19-a"></script>
-  <script src="app.js?v=2026.09.23-a"></script>
+  <script src="app.js?v=2026.09.23-b"></script>
 </body>
 </html>
