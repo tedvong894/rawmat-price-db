@@ -2,7 +2,7 @@
 // 策略：网络优先（永远拿最新版），网络失败时才用缓存兜底（保证离线可打开）
 // 这样不再需要「强制刷新」按钮：打开就是最新版。
 
-const CACHE_NAME = 'rm-price-db-net-v14';
+const CACHE_NAME = 'rm-price-db-net-v15';
 const SHELL = ['./index.html', './manifest.webmanifest', './icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
