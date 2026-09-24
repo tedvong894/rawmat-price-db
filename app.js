@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.09.24-a';
+const APP_VERSION = '2026.09.24-b';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -66,6 +66,9 @@ function lastPricingDate(materialName, supplier) {
 
 function defaultPricingDate(materialName, supplier) {
   const key = (materialName || '').trim() + '::' + (supplier || '').trim();
+  // 价格信息库「手工录入」的价格为最新定价，其定价日期优先作为默认
+  const ov = key ? priceLibOverrides[key] : null;
+  if (ov && ov.pricingDate) return ov.pricingDate;
   if (key && pricingDateDefaults[key]) return pricingDateDefaults[key];
   return lastPricingDate(materialName, supplier);
 }
@@ -425,7 +428,7 @@ function onSupplierSelectChange() {
     input.focus();
     if (btn) btn.textContent = '取消';
   } else {
-    // 选了已有供应商（非新供应商）→ 定价时间默认取上次供货时间
+    // 选了已有供应商（非新供应商）→ 定价时间默认取价格信息库手工录入的最新价；无则取上次定价时间
     pricingDateTouched = false;
     applyPricingDateDefault();
   }
@@ -993,7 +996,7 @@ function onMaterialNameInput() {
   }
   // 供应商与材料勾稽联动：只保留供应过该材料的供应商
   refreshSupplierList();
-  // 非新供应商时，定价时间默认取上次供货时间
+  // 非新供应商时，定价时间默认取价格信息库手工录入的最新价；无则取上次定价时间
   pricingDateTouched = false;
   applyPricingDateDefault();
 }
