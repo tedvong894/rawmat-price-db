@@ -34,6 +34,7 @@
       <button class="tab" data-tab="stats" onclick="switchTab('stats')">📊 统计概览</button>
       <button class="tab" data-tab="suppliers" onclick="switchTab('suppliers')">🏢 供应商库</button>
       <button class="tab" data-tab="materials" onclick="switchTab('materials')">📦 材料库</button>
+      <button class="tab" data-tab="pricelib" onclick="switchTab('pricelib')">💰 价格信息库</button>
     </nav>
 
     <!-- ============ 数据录入 ============ -->
@@ -351,6 +352,68 @@
       </div>
     </section>
 
+      <section class="tab-content" id="tab-pricelib">
+        <div class="card">
+          <h2>手工录入价格</h2>
+          <form id="priceLibForm" onsubmit="saveManualPriceFromForm(event)">
+            <datalist id="priceLibMaterialList"></datalist>
+            <datalist id="priceLibSupplierList"></datalist>
+            <div class="form-row">
+              <div class="form-group">
+                <label>材料名称 <span class="req">*</span></label>
+                <input type="text" id="plMaterial" list="priceLibMaterialList" placeholder="如：冷轧钢板" required>
+              </div>
+              <div class="form-group">
+                <label>供应商 <span class="req">*</span></label>
+                <input type="text" id="plSupplier" list="priceLibSupplierList" placeholder="如：宝钢" required>
+              </div>
+              <div class="form-group">
+                <label>单价（元）<span class="req">*</span></label>
+                <input type="number" id="plPrice" placeholder="如：4500.00" step="0.001" min="0" required>
+              </div>
+              <div class="form-group">
+                <label>定价时间</label>
+                <input type="date" id="plDate">
+              </div>
+            </div>
+            <div class="form-row form-actions">
+              <button type="submit" class="btn btn-primary" id="plSubmitBtn">💾 保存手工价格</button>
+              <button type="button" class="btn" onclick="resetPriceLibForm()">清空</button>
+              <span class="form-hint" id="priceLibFormHint"></span>
+            </div>
+            <p style="color:var(--text-light);font-size:13px;margin-top:8px;line-height:1.6;">说明：<strong>自动取值</strong> = 取自该「材料·供应商」历史记录中<strong>定价时间最新</strong>的一笔价格与日期；<strong>手工录入</strong>会<strong>优先覆盖</strong>自动取值，点「清除」后自动恢复。</p>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>价格信息库</h2>
+            <div class="filter-bar">
+              <input type="text" id="priceLibSearch" placeholder="🔍 搜索材料/供应商..." oninput="renderPriceLibrary()">
+            </div>
+          </div>
+          <div class="stats-grid" id="priceLibSummary"></div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>材料名称</th>
+                  <th>分类</th>
+                  <th>单位</th>
+                  <th>供应商</th>
+                  <th>最新价格</th>
+                  <th>定价日期</th>
+                  <th>来源</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="priceLibBody"></tbody>
+            </table>
+          </div>
+          <div class="table-footer" id="priceLibFooter"></div>
+        </div>
+      </section>
+
       <footer class="app-footer">
         <div class="footer-left">
           <span>原材料价格数据库</span>
@@ -423,6 +486,6 @@
   <div class="toast" id="toast"></div>
 
   <script src="seed-data.js?v=2026.09.19-a"></script>
-  <script src="app.js?v=2026.09.23-c"></script>
+  <script src="app.js?v=2026.09.24-a"></script>
 </body>
 </html>
