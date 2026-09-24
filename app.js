@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.09.23-c';
+const APP_VERSION = '2026.09.24-a';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -40,6 +40,15 @@ const PD_DEFAULTS_KEY = 'rm_pricing_date_defaults';
 let pricingDateDefaults = {};
 try { pricingDateDefaults = JSON.parse(localStorage.getItem(PD_DEFAULTS_KEY) || '{}'); } catch (e) { pricingDateDefaults = {}; }
 let pricingDateTouched = false; // 当前表单内用户是否手动改过定价时间
+
+// ===== 价格信息库（自动取最新价 + 手工录入覆盖）=====
+// 「自动」= 从价格记录中取该「材料::供应商」组合定价时间最新的一笔，作为最新价与定价日期；
+// 「手工」= 用户人工录入，存于 priceLibOverrides，优先级高于自动；清除后回退到自动。
+const PRICELIB_KEY = 'rm_pricelib_overrides';
+let priceLibOverrides = {};
+try { priceLibOverrides = JSON.parse(localStorage.getItem(PRICELIB_KEY) || '{}'); } catch (e) { priceLibOverrides = {}; }
+let priceLibRows = [];
+
 
 function lastPricingDate(materialName, supplier) {
   const name = (materialName || '').trim();
@@ -127,7 +136,7 @@ function setSyncState(t) {
 }
 
 function getSyncPayload() {
-  return { records: records, materials: materials, _ts: Date.now() };
+  return { records: records, materials: materials, priceLib: priceLibOverrides, _ts: Date.now() };
 }
 
 // 直接写回 localStorage（绕过 schedulePush，避免拉取后又被回推）
@@ -135,8 +144,10 @@ function applySyncPayload(p) {
   if (!p || !Array.isArray(p.records) || !Array.isArray(p.materials)) return false;
   records = p.records;
   materials = p.materials;
+  priceLibOverrides = p.priceLib || {};
   localStorage.setItem(STORE_KEY, JSON.stringify(records));
   localStorage.setItem(MATERIAL_DB_KEY, JSON.stringify(materials));
+  localStorage.setItem(PRICELIB_KEY, JSON.stringify(priceLibOverrides));
   refreshAll();
   return true;
 }
@@ -256,6 +267,7 @@ function switchTab(tabId) {
   if (tabId === 'stats') renderStats();
   if (tabId === 'suppliers') renderSuppliers();
   if (tabId === 'materials') renderMaterials();
+  if (tabId === 'pricelib') renderPriceLibrary();
 }
 
 // ===== 数据录入 / 编辑 =====
@@ -1660,6 +1672,9 @@ function refreshAll() {
   if (document.getElementById('tab-materials').classList.contains('active')) {
     renderMaterials();
   }
+  if (document.getElementById('tab-pricelib').classList.contains('active')) {
+    renderPriceLibrary();
+  }
 }
 
 // 分类改名：旧「原材料」统一映射到「主材」（材料库与价格记录都改）
@@ -1916,6 +1931,149 @@ function checkUpdate() {
       .catch(() => {});
   }
   setTimeout(() => window.location.reload(), 200);
+}
+
+function buildPriceLibrary() {
+  const map = {};
+  records.forEach(r => {
+    const name = (r.materialName || '').trim();
+    const sup = (r.supplier || '').trim();
+    if (!name || !sup) return;
+    const key = name + '::' + sup;
+    if (!map[key]) map[key] = { name, supplier: sup, category: r.category || '', unit: r.unit || '', autoPrice: null, autoDate: '' };
+    if ((r.pricingDate || '') > (map[key].autoDate || '')) { map[key].autoPrice = r.price; map[key].autoDate = r.pricingDate || ''; }
+  });
+  // 纳入仅手工录入、无价格记录的 材料::供应商 组合
+  Object.keys(priceLibOverrides).forEach(key => {
+    if (!map[key]) {
+      const idx = key.lastIndexOf('::');
+      map[key] = { name: key.slice(0, idx), supplier: key.slice(idx + 2), category: '', unit: '', autoPrice: null, autoDate: '' };
+    }
+  });
+  // 以材料库为权威补全 分类/单位；再合并手工覆盖，得出展示值
+  return Object.values(map).map(o => {
+    const db = materials.find(m => m.name === o.name);
+    if (db) {
+      if (db.category) o.category = db.category;
+      if (db.unit) o.unit = db.unit;
+    }
+    const ov = priceLibOverrides[o.name + '::' + o.supplier];
+    if (ov) { o.price = ov.price; o.date = ov.pricingDate || ''; o.source = 'manual'; }
+    else { o.price = o.autoPrice; o.date = o.autoDate; o.source = 'auto'; }
+    return o;
+  });
+}
+
+function refreshPriceLibDatalists() {
+  const names = [...new Set([...records.map(r => r.materialName), ...materials.map(m => m.name)])].filter(Boolean).sort();
+  const sups = [...new Set(records.map(r => (r.supplier || '').trim()).filter(Boolean))].sort();
+  const nl = document.getElementById('priceLibMaterialList');
+  const sl = document.getElementById('priceLibSupplierList');
+  if (nl) nl.innerHTML = names.map(n => '<option value="' + esc(n) + '">').join('');
+  if (sl) sl.innerHTML = sups.map(n => '<option value="' + esc(n) + '">').join('');
+}
+
+function renderPriceLibrary() {
+  refreshPriceLibDatalists();
+  const list = buildPriceLibrary().sort((a, b) => {
+    if (a.name < b.name) return -1;
+    if (a.name > b.name) return 1;
+    return (a.supplier || '').localeCompare(b.supplier || '');
+  });
+  priceLibRows = list;
+
+  const kwEl = document.getElementById('priceLibSearch');
+  const kw = (kwEl ? kwEl.value : '').trim().toLowerCase();
+  const filtered = kw ? list.filter(o => o.name.toLowerCase().includes(kw) || (o.supplier || '').toLowerCase().includes(kw)) : list;
+
+  const tbody = document.getElementById('priceLibBody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="emoji">💰</div>暂无价格信息（录入价格记录或手工录入后会出现在这里）</td></tr>';
+    const f = document.getElementById('priceLibFooter'); if (f) f.textContent = '';
+    const s = document.getElementById('priceLibSummary'); if (s) s.innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(o => {
+    const realIdx = list.indexOf(o);
+    const srcBadge = o.source === 'manual'
+      ? '<span style="color:#b45309;font-weight:600;">手动</span>'
+      : '<span style="color:#2563eb;font-weight:600;">自动</span>';
+    const ops = o.source === 'manual'
+      ? '<button class="btn-link" onclick="startManualPriceAt(' + realIdx + ')">编辑</button> <button class="btn-link" style="color:var(--danger)" onclick="clearManualPriceAt(' + realIdx + ')">清除</button>'
+      : '<button class="btn-link" onclick="startManualPriceAt(' + realIdx + ')">手动录入</button>';
+    return '<tr>' +
+      '<td><strong>' + esc(o.name) + '</strong></td>' +
+      '<td>' + (esc(o.category) || '—') + '</td>' +
+      '<td>' + (esc(o.unit) || '—') + '</td>' +
+      '<td>' + (esc(o.supplier) || '—') + '</td>' +
+      '<td>' + (o.price != null ? fmtPrice(o.price) : '—') + '</td>' +
+      '<td>' + (esc(o.date) || '—') + '</td>' +
+      '<td>' + srcBadge + '</td>' +
+      '<td>' + ops + '</td>' +
+    '</tr>';
+  }).join('');
+
+  const manualCount = filtered.filter(o => o.source === 'manual').length;
+  const f = document.getElementById('priceLibFooter'); if (f) f.textContent = '共 ' + filtered.length + ' 个材料-供应商组合 | 手工录入 ' + manualCount + ' 个';
+  const s = document.getElementById('priceLibSummary');
+  if (s) s.innerHTML =
+    '<div class="stat-card"><div class="icon">💰</div><div class="stat-label">价格组合总数</div><div class="stat-value">' + filtered.length + '</div></div>' +
+    '<div class="stat-card"><div class="icon">✏️</div><div class="stat-label">手工录入（优先）</div><div class="stat-value" style="color:#b45309">' + manualCount + '</div><div class="stat-sub">覆盖自动取值</div></div>' +
+    '<div class="stat-card"><div class="icon">🔄</div><div class="stat-label">自动取值</div><div class="stat-value" style="color:#2563eb">' + (filtered.length - manualCount) + '</div></div>';
+}
+
+function saveManualPriceFromForm(e) {
+  if (e) e.preventDefault();
+  const name = document.getElementById('plMaterial').value.trim();
+  const supplier = document.getElementById('plSupplier').value.trim();
+  const price = parseFloat(document.getElementById('plPrice').value);
+  const date = document.getElementById('plDate').value;
+  if (!name || !supplier) { showToast('请填写材料名称和供应商', 'error'); return; }
+  if (isNaN(price)) { showToast('请填写有效单价', 'error'); return; }
+  const key = name + '::' + supplier;
+  priceLibOverrides[key] = { price: price, pricingDate: date || new Date().toISOString().slice(0, 10) };
+  localStorage.setItem(PRICELIB_KEY, JSON.stringify(priceLibOverrides));
+  showToast('已保存手工价格（优先级高于自动）', 'success');
+  resetPriceLibForm();
+  renderPriceLibrary();
+  if (SYNCSB.enabled) schedulePush();
+}
+
+function startManualPriceAt(i) {
+  const o = priceLibRows[i];
+  if (!o) return;
+  document.getElementById('plMaterial').value = o.name;
+  document.getElementById('plSupplier').value = o.supplier;
+  document.getElementById('plPrice').value = (o.price != null ? o.price : '');
+  document.getElementById('plDate').value = o.date || new Date().toISOString().slice(0, 10);
+  const hint = document.getElementById('priceLibFormHint');
+  if (hint) {
+    hint.textContent = '正在' + (o.source === 'manual' ? '编辑' : '为') + '「' + o.name + ' · ' + o.supplier + '」录入手工价格（将覆盖自动取值）';
+    hint.style.color = '#b45309';
+  }
+  const form = document.getElementById('priceLibForm');
+  if (form) window.scrollTo({ top: form.offsetTop - 80, behavior: 'smooth' });
+}
+
+function clearManualPriceAt(i) {
+  const o = priceLibRows[i];
+  if (!o) return;
+  const key = o.name + '::' + o.supplier;
+  if (!priceLibOverrides[key]) return;
+  delete priceLibOverrides[key];
+  localStorage.setItem(PRICELIB_KEY, JSON.stringify(priceLibOverrides));
+  showToast('已清除手工价格，恢复自动取值', 'success');
+  renderPriceLibrary();
+  if (SYNCSB.enabled) schedulePush();
+}
+
+function resetPriceLibForm() {
+  const form = document.getElementById('priceLibForm');
+  if (form) form.reset();
+  const d = document.getElementById('plDate'); if (d) d.value = new Date().toISOString().slice(0, 10);
+  const hint = document.getElementById('priceLibFormHint');
+  if (hint) { hint.textContent = ''; hint.style.color = ''; }
 }
 
 // ===== 初始化 =====
