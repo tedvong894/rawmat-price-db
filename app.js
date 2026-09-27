@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.09.24-d';
+const APP_VERSION = '2026.09.24-e';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -173,6 +173,39 @@ function setSyncState(t) {
   if (el) el.textContent = t;
 }
 
+// ===== 按 id 合并（根治：任何设备都不可能通过同步删掉它没有的记录）=====
+// 规则：取两边所有 id 的并集；同 id 记录谁的 updatedAt 新留谁（都没有则保留本地）；
+// 只有一边有的 id 一律保留。
+function recVersion(r) {
+  if (!r) return 0;
+  const u = r.updatedAt;
+  if (typeof u === 'number') return u;
+  if (typeof u === 'string') { const t = Date.parse(u); return isNaN(t) ? 0 : t; }
+  return 0;
+}
+function mergeRecordsById(localArr, incomingArr) {
+  const map = {};
+  (localArr || []).forEach(r => { if (r && r.id) map[r.id] = r; });
+  (incomingArr || []).forEach(r => {
+    if (!r || !r.id) return;
+    const cur = map[r.id];
+    if (!cur) { map[r.id] = r; return; }
+    if (recVersion(r) > recVersion(cur)) map[r.id] = r;
+  });
+  return Object.values(map);
+}
+function mergeMaterialsByName(localArr, incomingArr) {
+  const map = {};
+  (localArr || []).forEach(m => { if (m && m.name) map[m.name] = m; });
+  (incomingArr || []).forEach(m => { if (m && m.name && !map[m.name]) map[m.name] = m; });
+  return Object.values(map);
+}
+function mergePriceLib(a, b) {
+  const out = Object.assign({}, a || {});
+  Object.keys(b || {}).forEach(k => { if (!out[k]) out[k] = b[k]; });
+  return out;
+}
+
 function getSyncPayload() {
   return { records: records, materials: materials, priceLib: priceLibOverrides, _ts: Date.now() };
 }
@@ -180,10 +213,11 @@ function getSyncPayload() {
 // 直接写回 localStorage（绕过 schedulePush，避免拉取后又被回推）
 function applySyncPayload(p) {
   if (!p || !Array.isArray(p.records) || !Array.isArray(p.materials)) return false;
-  takePullSnapshot(); // 拉取覆盖本地前先留快照，可回滚
-  records = p.records;
-  materials = p.materials;
-  priceLibOverrides = p.priceLib || {};
+  takePullSnapshot(); // 合并前先留快照，可回滚
+  // 按 id 合并（并集）：旧设备的数据删不掉本地多出的记录
+  records = mergeRecordsById(records, p.records);
+  materials = mergeMaterialsByName(materials, p.materials);
+  priceLibOverrides = mergePriceLib(priceLibOverrides, p.priceLib || {});
   localStorage.setItem(STORE_KEY, JSON.stringify(records));
   localStorage.setItem(MATERIAL_DB_KEY, JSON.stringify(materials));
   localStorage.setItem(PRICELIB_KEY, JSON.stringify(priceLibOverrides));
@@ -203,10 +237,23 @@ async function pushState() {
   const sb = sbClient();
   if (!sb) return;
   setSyncState('同步中…');
-  const payload = getSyncPayload();
-  _localTs = payload._ts;
-  localStorage.setItem('rm_sync_ts', String(_localTs));
   try {
+    // 推送前先取云端做「按 id 并集」合并：旧设备推数据也删不掉云端多出的记录
+    const { data: cur, error: e1 } = await sb.from(SYNCSB.table)
+      .select('data').eq('id', SYNCSB.board).maybeSingle();
+    if (e1) throw e1;
+    if (cur && cur.data && Array.isArray(cur.data.records)) {
+      records = mergeRecordsById(records, cur.data.records);
+      materials = mergeMaterialsByName(materials, cur.data.materials || []);
+      priceLibOverrides = mergePriceLib(priceLibOverrides, cur.data.priceLib || {});
+      localStorage.setItem(STORE_KEY, JSON.stringify(records));
+      localStorage.setItem(MATERIAL_DB_KEY, JSON.stringify(materials));
+      localStorage.setItem(PRICELIB_KEY, JSON.stringify(priceLibOverrides));
+      refreshAll();
+    }
+    const payload = getSyncPayload();
+    _localTs = payload._ts;
+    localStorage.setItem('rm_sync_ts', String(_localTs));
     const { error } = await sb.from(SYNCSB.table).upsert({
       id: SYNCSB.board,
       data: payload,
@@ -232,17 +279,8 @@ async function pullState() {
       if (data.data._ts > _localTs) {
         _localTs = data.data._ts;
         localStorage.setItem('rm_sync_ts', String(_localTs));
-        const _inc = data.data;
-        const _incN = Array.isArray(_inc.records) ? _inc.records.length : 0;
-        // 防覆盖：云端记录数少于本地 → 疑似旧设备带新时间戳覆盖，保留本地并提示
-        if (_incN < records.length && records.length > 0) {
-          takePullSnapshot();
-          showToast('云端数据比本地少 ' + (records.length - _incN) + ' 条，疑似旧设备覆盖，已保留本地（数据管理-同步备份可恢复），未自动覆盖', 'warn');
-          setSyncState('已同步');
-        } else {
-          applySyncPayload(_inc);
-          setSyncState('已同步');
-        }
+        applySyncPayload(data.data); // 内部已按 id 合并，不会丢本地多出的记录
+        setSyncState('已同步');
       } else {
         setSyncState('已同步');
       }
@@ -363,7 +401,8 @@ function saveRecord(e) {
     records.push({
       id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
       ...common,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
     showToast('保存成功！', 'success');
   }
