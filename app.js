@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.09.24-c';
+const APP_VERSION = '2026.09.24-d';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -112,6 +112,41 @@ let _pushTimer = null;
 let _localTs = Number(localStorage.getItem('rm_sync_ts') || 0);
 let _sbReady = null;
 
+// 拉取覆盖前本地快照（防旧设备带新时间戳静默覆盖、丢数据）
+const PULL_BACKUP_KEY = 'rm_pull_backups';
+let pullBackups = [];
+try { pullBackups = JSON.parse(localStorage.getItem(PULL_BACKUP_KEY) || '[]'); } catch (e) { pullBackups = []; }
+function takePullSnapshot() {
+  try {
+    pullBackups.push({ ts: Date.now(), records: records, materials: materials, priceLib: priceLibOverrides });
+    if (pullBackups.length > 10) pullBackups = pullBackups.slice(-10);
+    localStorage.setItem(PULL_BACKUP_KEY, JSON.stringify(pullBackups));
+  } catch (e) {}
+}
+function restorePullBackup(i) {
+  const b = pullBackups[i];
+  if (!b) return;
+  records = b.records || [];
+  materials = b.materials || [];
+  priceLibOverrides = b.priceLib || {};
+  localStorage.setItem(STORE_KEY, JSON.stringify(records));
+  localStorage.setItem(MATERIAL_DB_KEY, JSON.stringify(materials));
+  localStorage.setItem(PRICELIB_KEY, JSON.stringify(priceLibOverrides));
+  refreshAll();
+  renderPullBackups();
+  showToast('已从本地同步备份恢复', 'success');
+}
+function renderPullBackups() {
+  const el = document.getElementById('pullBackupList');
+  if (!el) return;
+  if (!pullBackups.length) { el.innerHTML = '<div class="backup-empty">暂无备份</div>'; return; }
+  el.innerHTML = pullBackups.slice().reverse().map((b, ri) => {
+    const i = pullBackups.length - 1 - ri;
+    const t = new Date(b.ts).toLocaleString('zh-CN');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;"><span>${esc(t)} · ${(b.records||[]).length}条</span><button type="button" onclick="restorePullBackup(${i})">恢复</button></div>`;
+  }).join('');
+}
+
 // supabase 脚本是 async 加载，可能晚于 app.js 执行；这里等它就绪（最多 ~5s）
 function sbReadyPromise() {
   if (typeof supabase !== 'undefined') return Promise.resolve();
@@ -145,6 +180,7 @@ function getSyncPayload() {
 // 直接写回 localStorage（绕过 schedulePush，避免拉取后又被回推）
 function applySyncPayload(p) {
   if (!p || !Array.isArray(p.records) || !Array.isArray(p.materials)) return false;
+  takePullSnapshot(); // 拉取覆盖本地前先留快照，可回滚
   records = p.records;
   materials = p.materials;
   priceLibOverrides = p.priceLib || {};
@@ -196,8 +232,17 @@ async function pullState() {
       if (data.data._ts > _localTs) {
         _localTs = data.data._ts;
         localStorage.setItem('rm_sync_ts', String(_localTs));
-        applySyncPayload(data.data);
-        setSyncState('已同步');
+        const _inc = data.data;
+        const _incN = Array.isArray(_inc.records) ? _inc.records.length : 0;
+        // 防覆盖：云端记录数少于本地 → 疑似旧设备带新时间戳覆盖，保留本地并提示
+        if (_incN < records.length && records.length > 0) {
+          takePullSnapshot();
+          showToast('云端数据比本地少 ' + (records.length - _incN) + ' 条，疑似旧设备覆盖，已保留本地（数据管理-同步备份可恢复），未自动覆盖', 'warn');
+          setSyncState('已同步');
+        } else {
+          applySyncPayload(_inc);
+          setSyncState('已同步');
+        }
       } else {
         setSyncState('已同步');
       }
@@ -2088,6 +2133,7 @@ document.addEventListener('DOMContentLoaded', () => {
   normalizeCategories();
   syncMaterialsFromRecords(); // 自动同步材料库
   refreshAll();
+  renderPullBackups();
   registerServiceWorker();
   const vEl = document.getElementById('appVersion');
   if (vEl) vEl.textContent = 'v' + APP_VERSION;
