@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.09.24-b';
+const APP_VERSION = '2026.09.24-c';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
