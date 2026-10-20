@@ -1,11 +1,12 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.09.24-e';
+const APP_VERSION = '2026.10.20-a';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
 const MATERIAL_DB_KEY = 'materialDB';
+const SUPPLIER_DB_KEY = 'rm_supplier_db';
 const CATEGORIES = ['主材', '机辅料', '包装物', '其它'];
 const isKnownCategory = (c) => CATEGORIES.includes(c);
 
@@ -31,6 +32,15 @@ function saveMaterialDB(data) {
 
 let records = loadData();
 let materials = loadMaterialDB();
+function loadSupplierDB() {
+  const raw = localStorage.getItem(SUPPLIER_DB_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+function saveSupplierDB(data) {
+  localStorage.setItem(SUPPLIER_DB_KEY, JSON.stringify(data));
+  schedulePush();
+}
+let suppliers = loadSupplierDB();
 let editingId = null; // 当前正在编辑的记录id（null=新增模式）
 
 // ===== 定价时间默认值（按「材料::供应商」记忆）=====
@@ -205,9 +215,14 @@ function mergePriceLib(a, b) {
   Object.keys(b || {}).forEach(k => { if (!out[k]) out[k] = b[k]; });
   return out;
 }
+function mergeSuppliers(a, b) {
+  const set = new Set((a || []).map(s => (s || '').trim()).filter(Boolean));
+  (b || []).forEach(s => { const t = (s || '').trim(); if (t) set.add(t); });
+  return [...set];
+}
 
 function getSyncPayload() {
-  return { records: records, materials: materials, priceLib: priceLibOverrides, _ts: Date.now() };
+  return { records: records, materials: materials, suppliers: suppliers, priceLib: priceLibOverrides, _ts: Date.now() };
 }
 
 // 直接写回 localStorage（绕过 schedulePush，避免拉取后又被回推）
@@ -217,9 +232,11 @@ function applySyncPayload(p) {
   // 按 id 合并（并集）：旧设备的数据删不掉本地多出的记录
   records = mergeRecordsById(records, p.records);
   materials = mergeMaterialsByName(materials, p.materials);
+  suppliers = mergeSuppliers(suppliers, p.suppliers || []);
   priceLibOverrides = mergePriceLib(priceLibOverrides, p.priceLib || {});
   localStorage.setItem(STORE_KEY, JSON.stringify(records));
   localStorage.setItem(MATERIAL_DB_KEY, JSON.stringify(materials));
+  localStorage.setItem(SUPPLIER_DB_KEY, JSON.stringify(suppliers));
   localStorage.setItem(PRICELIB_KEY, JSON.stringify(priceLibOverrides));
   refreshAll();
   return true;
@@ -245,9 +262,11 @@ async function pushState() {
     if (cur && cur.data && Array.isArray(cur.data.records)) {
       records = mergeRecordsById(records, cur.data.records);
       materials = mergeMaterialsByName(materials, cur.data.materials || []);
+      suppliers = mergeSuppliers(suppliers, cur.data.suppliers || []);
       priceLibOverrides = mergePriceLib(priceLibOverrides, cur.data.priceLib || {});
       localStorage.setItem(STORE_KEY, JSON.stringify(records));
       localStorage.setItem(MATERIAL_DB_KEY, JSON.stringify(materials));
+      localStorage.setItem(SUPPLIER_DB_KEY, JSON.stringify(suppliers));
       localStorage.setItem(PRICELIB_KEY, JSON.stringify(priceLibOverrides));
       refreshAll();
     }
@@ -357,6 +376,22 @@ function switchTab(tabId) {
 }
 
 // ===== 数据录入 / 编辑 =====
+
+// 数据录入时，若材料库尚无该材料，自动加入（使用部门留空，其余属性取本次录入值）
+function ensureMaterialInDB(name, category, unit) {
+  if (!name) return;
+  if (materials.some(m => m.name === name)) return; // 已存在则不覆盖
+  materials.push({ name: name, category: category || '其它', unit: unit || '', department: '' });
+  saveMaterialDB(materials);
+}
+// 数据录入时，若供应商库尚无该供应商，自动加入（供应商库 = 显式库 + 记录派生 并集）
+function ensureSupplierInDB(supplier) {
+  if (!supplier) return;
+  if (suppliers.includes(supplier)) return;
+  suppliers.push(supplier);
+  saveSupplierDB(suppliers);
+}
+
 function saveRecord(e) {
   e.preventDefault();
   const name = document.getElementById('materialName').value.trim();
@@ -408,6 +443,8 @@ function saveRecord(e) {
   }
 
   saveData(records);
+  ensureMaterialInDB(name, common.category, common.unit);
+  ensureSupplierInDB(common.supplier);
   resetForm();
   refreshAll();
 }
@@ -1089,12 +1126,15 @@ function onMaterialNameInput() {
 function renderSuppliers() {
   const kw = (document.getElementById('supplierSearch')?.value || '').trim().toLowerCase();
 
-  // 按供应商聚合
+  // 按供应商聚合：先以「供应商库」为基准（含仅入库、尚无记录的新供应商），再并入记录中的供应商
   const map = {};
+  suppliers.forEach(s => {
+    const name = (s || '').trim();
+    if (name && !map[name]) map[name] = { name, materials: new Set(), records: [], totalAmount: 0, dates: [] };
+  });
   records.forEach(r => {
     const s = (r.supplier || '').trim();
     if (!s) return; // 无供应商名的不纳入供应商库
-    if (kw && !s.toLowerCase().includes(kw)) return;
     if (!map[s]) {
       map[s] = { name: s, materials: new Set(), records: [], totalAmount: 0, dates: [] };
     }
@@ -1111,6 +1151,7 @@ function renderSuppliers() {
     totalAmount: g.totalAmount,
     lastDate: g.dates.length ? g.dates.reduce((a, b) => a > b ? a : b) : ''
   }));
+  if (kw) list = list.filter(s => s.name.toLowerCase().includes(kw));
 
   // 排序
   list.sort((a, b) => {
