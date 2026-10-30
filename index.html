@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="原料价格">
-  <link rel="stylesheet" href="style.css?v=2026.10.31-b">
+  <link rel="stylesheet" href="style.css?v=2026.10.31-c">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
 </head>
@@ -146,18 +146,6 @@
           </div>
         </div>
 
-        <!-- 走势图：选定某个原材料后显示在明细上方 -->
-        <div class="trend-panel" id="overviewTrend" style="display:none;">
-          <div class="trend-panel-head">
-            <h3 id="overviewTrendTitle">价格波动趋势</h3>
-            <span class="filter-unit-readout" id="overviewTrendSub"></span>
-          </div>
-          <div class="chart-container">
-            <canvas id="overviewTrendChart"></canvas>
-          </div>
-          <div class="trend-stats" id="overviewTrendStats"></div>
-        </div>
-
         <div class="table-wrap">
           <table class="data-table" id="dataTable">
             <thead>
@@ -179,6 +167,18 @@
           </table>
         </div>
         <div class="table-footer" id="tableFooter"></div>
+
+        <!-- 走势图：选定某个原材料后显示在明细下方 -->
+        <div class="trend-panel" id="overviewTrend" style="display:none;">
+          <div class="trend-panel-head">
+            <h3 id="overviewTrendTitle">价格波动趋势</h3>
+            <span class="filter-unit-readout" id="overviewTrendSub"></span>
+          </div>
+          <div class="chart-container">
+            <canvas id="overviewTrendChart"></canvas>
+          </div>
+          <div class="trend-stats" id="overviewTrendStats"></div>
+        </div>
       </div>
     </section>
 
@@ -472,7 +472,7 @@
   <!-- Toast提示 -->
   <div class="toast" id="toast"></div>
 
-  <script src="seed-data.js?v=2026.10.31-b"></script>
-  <script src="app.js?v=2026.10.31-b"></script>
+  <script src="seed-data.js?v=2026.10.31-c"></script>
+  <script src="app.js?v=2026.10.31-c"></script>
 </body>
 </html>
