@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>原材料价格数据库 - 内审专用</title>
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="原料价格">
-  <link rel="stylesheet" href="style.css?v=2026.10.30-a">
+  <link rel="stylesheet" href="style.css?v=2026.10.31-a">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
 </head>
@@ -33,7 +34,6 @@
     <nav class="tabs">
       <button class="tab active" data-tab="entry" onclick="switchTab('entry')">数据录入</button>
       <button class="tab" data-tab="list" onclick="switchTab('list')">数据总览</button>
-      <button class="tab" data-tab="trend" onclick="switchTab('trend')">趋势分析</button>
       <button class="tab" data-tab="stats" onclick="switchTab('stats')">统计概览</button>
       <button class="tab" data-tab="suppliers" onclick="switchTab('suppliers')">供应商库</button>
       <button class="tab" data-tab="materials" onclick="switchTab('materials')">材料库</button>
@@ -145,6 +145,19 @@
             <button class="btn btn-sm" onclick="clearFilters()">清除筛选</button>
           </div>
         </div>
+
+        <!-- 走势图：选定某个原材料后显示在明细上方 -->
+        <div class="trend-panel" id="overviewTrend" style="display:none;">
+          <div class="trend-panel-head">
+            <h3 id="overviewTrendTitle">价格波动趋势</h3>
+            <span class="filter-unit-readout" id="overviewTrendSub"></span>
+          </div>
+          <div class="chart-container">
+            <canvas id="overviewTrendChart"></canvas>
+          </div>
+          <div class="trend-stats" id="overviewTrendStats"></div>
+        </div>
+
         <div class="table-wrap">
           <table class="data-table" id="dataTable">
             <thead>
@@ -166,42 +179,6 @@
           </table>
         </div>
         <div class="table-footer" id="tableFooter"></div>
-      </div>
-    </section>
-
-    <!-- ============ 趋势分析 ============ -->
-    <section class="tab-content" id="tab-trend">
-      <div class="card">
-        <div class="card-header">
-          <h2>价格波动趋势分析</h2>
-          <div class="filter-bar">
-            <select id="trendMaterial" onchange="renderTrend()">
-              <option value="">请选择原材料</option>
-            </select>
-            <button class="btn btn-sm" onclick="toggleMultiCompare()" id="multiCompareBtn">多材料对比</button>
-          </div>
-        </div>
-
-        <!-- 单材料趋势 -->
-        <div id="singleTrend">
-          <div class="chart-container">
-            <canvas id="trendChart"></canvas>
-          </div>
-          <div class="trend-stats" id="trendStats"></div>
-          <div class="trend-detail" id="trendDetail"></div>
-        </div>
-
-        <!-- 多材料对比 -->
-        <div id="multiCompare" style="display:none;">
-          <div class="multi-select-wrap">
-            <label>选择对比材料（最多5个）：</label>
-            <div id="multiMaterialCheckboxes" class="checkbox-group"></div>
-          </div>
-          <div class="chart-container">
-            <canvas id="compareChart"></canvas>
-          </div>
-          <div class="compare-table-wrap" id="compareTableWrap"></div>
-        </div>
       </div>
     </section>
 
@@ -495,7 +472,7 @@
   <!-- Toast提示 -->
   <div class="toast" id="toast"></div>
 
-  <script src="seed-data.js?v=2026.10.30-a"></script>
-  <script src="app.js?v=2026.10.30-a"></script>
+  <script src="seed-data.js?v=2026.10.31-a"></script>
+  <script src="app.js?v=2026.10.31-a"></script>
 </body>
 </html>
