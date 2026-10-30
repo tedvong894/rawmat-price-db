@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.10.20-a';
+const APP_VERSION = '2026.10.30-a';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -458,7 +458,7 @@ function resetForm() {
   editingId = null;
   const btn = document.getElementById('submitBtn');
   if (btn) {
-    btn.textContent = '💾 保存';
+    btn.textContent = '保存';
     btn.classList.remove('btn-warning');
   }
   const hint = document.getElementById('formHint');
@@ -532,7 +532,7 @@ function refreshSupplierList() {
 
   select.innerHTML = '<option value="">请选择或新增供应商</option>' + hintHtml +
     names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') +
-    '<option value="__new__">➕ 新增供应商...</option>';
+    '<option value="__new__">新增供应商...</option>';
   // 保留当前选择，如果它仍在新列表中
   if (current && (names.includes(current) || current === '__new__')) {
     select.value = current;
@@ -646,7 +646,7 @@ function renderTable() {
 
   const tbody = document.getElementById('tableBody');
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><div class="emoji">📭</div>暂无数据，请先录入</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-state">暂无数据，请先录入</td></tr>`;
     document.getElementById('tableFooter').textContent = '';
     return;
   }
@@ -739,7 +739,7 @@ function editRecord(id) {
   // 切换按钮与提示，进入编辑态
   const btn = document.getElementById('submitBtn');
   if (btn) {
-    btn.textContent = '✏️ 更新';
+    btn.textContent = '更新';
     btn.classList.add('btn-warning');
   }
   const hint = document.getElementById('formHint');
@@ -835,7 +835,7 @@ function renderMaterials() {
 
   const tbody = document.getElementById('materialBody');
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div class="emoji">📦</div>${kw ? '未找到匹配的材料' : '材料库为空，请从下方添加材料'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${kw ? '未找到匹配的材料' : '材料库为空，请从下方添加材料'}</td></tr>`;
     document.getElementById('materialFooter').textContent = '';
     document.getElementById('materialSummary').innerHTML = '';
     return;
@@ -861,17 +861,14 @@ function renderMaterials() {
   const withRecords = list.filter(m => m.recordCount > 0).length;
   document.getElementById('materialSummary').innerHTML = `
     <div class="stat-card">
-      <div class="icon">📦</div>
       <div class="stat-label">材料库总数</div>
       <div class="stat-value">${dbCount}</div>
     </div>
     <div class="stat-card">
-      <div class="icon">📋</div>
       <div class="stat-label">有价格记录</div>
       <div class="stat-value">${withRecords}</div>
     </div>
     <div class="stat-card">
-      <div class="icon">⚠️</div>
       <div class="stat-label">未归类材料</div>
       <div class="stat-value" style="color:${unclassified > 0 ? 'var(--danger)' : 'var(--success)'}">${unclassified}</div>
       <div class="stat-sub">有记录但未在材料库定义</div>
@@ -967,7 +964,7 @@ function resetMaterialForm() {
   document.getElementById('materialForm').reset();
   editingMaterialName = null;
   document.getElementById('materialFormTitle').textContent = '新增材料';
-  document.getElementById('materialSubmitBtn').textContent = '💾 保存';
+  document.getElementById('materialSubmitBtn').textContent = '保存';
   document.getElementById('materialSubmitBtn').classList.remove('btn-warning');
   document.getElementById('materialFormHint').textContent = '';
   const del = document.getElementById('deleteMaterialBtn');
@@ -983,7 +980,7 @@ function editMaterial(name) {
   document.getElementById('materialDbUnit').value = m.unit || '';
   setMaterialDept(m.department || (Array.isArray(m.departments) ? m.departments[0] : ''));
   document.getElementById('materialFormTitle').textContent = '编辑材料';
-  document.getElementById('materialSubmitBtn').textContent = '✏️ 更新';
+  document.getElementById('materialSubmitBtn').textContent = '更新';
   document.getElementById('materialSubmitBtn').classList.add('btn-warning');
   const unitTxt = m.unit ? `· 单位 ${m.unit}` : '';
   document.getElementById('materialFormHint').textContent = `正在编辑「${m.name}」· 分类 ${m.category}${unitTxt}（修改后点「更新」，或点「清空」取消）`;
@@ -1027,7 +1024,7 @@ function quickAddMaterial(name) {
   setMaterialDept('');
   editingMaterialName = null;
   document.getElementById('materialFormTitle').textContent = '新增材料';
-  document.getElementById('materialSubmitBtn').textContent = '💾 保存';
+  document.getElementById('materialSubmitBtn').textContent = '保存';
   document.getElementById('materialSubmitBtn').classList.remove('btn-warning');
   document.getElementById('materialFormHint').textContent = `为「${name}」选择分类后保存${topUnit ? `（已预填单位：${topUnit}）` : ''}`;
   window.scrollTo({ top: document.getElementById('materialForm').offsetTop - 80, behavior: 'smooth' });
@@ -1048,10 +1045,10 @@ function onMaterialFilterChange() {
     }
     // 联动显示该材料在材料库中的标准计量单位
     if (m && m.unit) {
-      unitReadout.textContent = '📐 标准单位：' + m.unit;
+      unitReadout.textContent = '标准单位：' + m.unit;
       unitReadout.classList.remove('filter-unit-readout-warn');
     } else {
-      unitReadout.textContent = '📐 单位：未定义';
+      unitReadout.textContent = '单位：未定义';
       unitReadout.classList.add('filter-unit-readout-warn');
     }
     unitReadout.style.display = '';
@@ -1165,7 +1162,7 @@ function renderSuppliers() {
 
   const tbody = document.getElementById('supplierBody');
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty-state"><div class="emoji">🏢</div>${kw ? '未找到匹配的供应商' : '暂无供应商数据（录入时填写"供应商"字段后会出现在这里）'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${kw ? '未找到匹配的供应商' : '暂无供应商数据（录入时填写"供应商"字段后会出现在这里）'}</td></tr>`;
     document.getElementById('supplierFooter').textContent = '';
     document.getElementById('supplierSummary').innerHTML = '';
     return;
@@ -1189,18 +1186,15 @@ function renderSuppliers() {
   const top = list.reduce((a, b) => a.totalAmount > b.totalAmount ? a : b);
   document.getElementById('supplierSummary').innerHTML = `
     <div class="stat-card">
-      <div class="icon">🏢</div>
       <div class="stat-label">供应商总数</div>
       <div class="stat-value">${totalSuppliers}</div>
     </div>
     <div class="stat-card">
-      <div class="icon">💰</div>
       <div class="stat-label">累计采购金额</div>
       <div class="stat-value">${fmtNum(totalAmount)}</div>
       <div class="stat-sub">元</div>
     </div>
     <div class="stat-card">
-      <div class="icon">🏆</div>
       <div class="stat-label">采购额最高供应商</div>
       <div class="stat-value" style="font-size:18px">${esc(top.name)}</div>
       <div class="stat-sub">${fmtNum(top.totalAmount)} 元</div>
@@ -1263,7 +1257,7 @@ function renderTrend() {
   document.getElementById('trendDetail').innerHTML = '';
 
   if (!materialName) {
-    ctx.parentElement.innerHTML = '<div class="empty-state"><div class="emoji">📈</div>请在右上角选择原材料查看趋势</div>';
+    ctx.parentElement.innerHTML = '<div class="empty-state">请在右上角选择原材料查看趋势</div>';
     return;
   }
 
@@ -1278,7 +1272,7 @@ function renderTrend() {
 
   if (materialRecords.length === 0) {
     document.querySelector('#singleTrend .chart-container').innerHTML =
-      '<div class="empty-state"><div class="emoji">📭</div>该材料暂无数据</div>';
+      '<div class="empty-state">该材料暂无数据</div>';
     return;
   }
 
@@ -1346,7 +1340,7 @@ function drawTrendChart(name, data) {
             label: function(ctx) {
               if (ctx.dataset.yAxisID === 'y1') {
                 const v = ctx.parsed.y;
-                return `环比: ${v >= 0 ? '↑' : '↓'}${Math.abs(v).toFixed(2)}%${Math.abs(v) >= ALERT_THRESHOLD ? ' ⚠️异常' : ''}`;
+                return `环比: ${v >= 0 ? '↑' : '↓'}${Math.abs(v).toFixed(2)}%${Math.abs(v) >= ALERT_THRESHOLD ? '（异常）' : ''}`;
               }
               return `单价: ${fmtPrice(ctx.parsed.y)} 元`;
             }
@@ -1562,24 +1556,20 @@ function renderStats() {
 
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-card">
-      <div class="icon">📋</div>
       <div class="stat-label">总记录数</div>
       <div class="stat-value">${totalRecords}</div>
       <div class="stat-sub">${materialCount} 种原材料</div>
     </div>
     <div class="stat-card">
-      <div class="icon">💰</div>
       <div class="stat-label">累计采购总额</div>
       <div class="stat-value">${fmtNum(totalAmount)}</div>
       <div class="stat-sub">元</div>
     </div>
     <div class="stat-card">
-      <div class="icon">📅</div>
       <div class="stat-label">最新数据月份</div>
       <div class="stat-value">${latestMonth}</div>
     </div>
     <div class="stat-card">
-      <div class="icon">⚠️</div>
       <div class="stat-label">异常波动条数</div>
       <div class="stat-value" style="color:${alertCount > 0 ? 'var(--danger)' : 'var(--success)'}">${alertCount}</div>
       <div class="stat-sub">环比≥±${ALERT_THRESHOLD}%</div>
@@ -1981,7 +1971,7 @@ window.addEventListener('appinstalled', () => {
   const btn = document.getElementById('installBtn');
   if (btn) btn.style.display = 'none';
   deferredInstallPrompt = null;
-  showToast('已安装到本地 🎉', 'success');
+  showToast('已安装到本地', 'success');
 });
 
 function detectBrowser() {
@@ -2116,7 +2106,7 @@ function renderPriceLibrary() {
 
   const tbody = document.getElementById('priceLibBody');
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="emoji">💰</div>暂无价格信息（录入价格记录或手工录入后会出现在这里）</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无价格信息（录入价格记录或手工录入后会出现在这里）</td></tr>';
     const f = document.getElementById('priceLibFooter'); if (f) f.textContent = '';
     const s = document.getElementById('priceLibSummary'); if (s) s.innerHTML = '';
     return;
@@ -2146,9 +2136,9 @@ function renderPriceLibrary() {
   const f = document.getElementById('priceLibFooter'); if (f) f.textContent = '共 ' + filtered.length + ' 个材料-供应商组合 | 手工录入 ' + manualCount + ' 个';
   const s = document.getElementById('priceLibSummary');
   if (s) s.innerHTML =
-    '<div class="stat-card"><div class="icon">💰</div><div class="stat-label">价格组合总数</div><div class="stat-value">' + filtered.length + '</div></div>' +
-    '<div class="stat-card"><div class="icon">✏️</div><div class="stat-label">手工录入（优先）</div><div class="stat-value" style="color:#b45309">' + manualCount + '</div><div class="stat-sub">覆盖自动取值</div></div>' +
-    '<div class="stat-card"><div class="icon">🔄</div><div class="stat-label">自动取值</div><div class="stat-value" style="color:#2563eb">' + (filtered.length - manualCount) + '</div></div>';
+    '<div class="stat-card"><div class="stat-label">价格组合总数</div><div class="stat-value">' + filtered.length + '</div></div>' +
+    '<div class="stat-card"><div class="stat-label">手工录入（优先）</div><div class="stat-value" style="color:#b45309">' + manualCount + '</div><div class="stat-sub">覆盖自动取值</div></div>' +
+    '<div class="stat-card"><div class="stat-label">自动取值</div><div class="stat-value" style="color:#2563eb">' + (filtered.length - manualCount) + '</div></div>';
 }
 
 function saveManualPriceFromForm(e) {
@@ -2206,6 +2196,20 @@ function resetPriceLibForm() {
 
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
+  // 图表全局默认样式（与界面设计系统一致：低饱和、细网格、tabular 数字）
+  if (typeof Chart !== 'undefined') {
+    try {
+      Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+      Chart.defaults.font.size = 12;
+      Chart.defaults.color = '#5b6472';
+      Chart.defaults.borderColor = '#e9ecf0';
+      Chart.defaults.plugins.legend.labels.boxWidth = 12;
+      Chart.defaults.plugins.legend.labels.usePointStyle = true;
+      Chart.defaults.plugins.legend.labels.color = '#5b6472';
+      Chart.defaults.animation.duration = 280;
+    } catch (e) {}
+  }
+
   setDefaultDate();
   migrateCategoryRename(); // 旧「原材料」分类统一改「主材」（幂等）
   migrateOldSampleData();
