@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.10.30-a';
+const APP_VERSION = '2026.10.31-a';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -343,8 +343,7 @@ function manualSync() {
 let editingMaterialName = null; // 当前正在编辑的材料名称（null=新增模式）
 let sortField = 'pricingDate';
 let sortAsc = false;
-let trendChartInstance = null;
-let compareChartInstance = null;
+let overviewTrendChartInstance = null;
 let amountChartInstance = null;
 let supplierSortField = 'totalAmount';
 let supplierSortAsc = false;
@@ -368,7 +367,6 @@ function switchTab(tabId) {
   document.getElementById('tab-' + tabId).classList.add('active');
 
   if (tabId === 'list') renderTable();
-  if (tabId === 'trend') { initTrendTab(); renderTrend(); }
   if (tabId === 'stats') renderStats();
   if (tabId === 'suppliers') renderSuppliers();
   if (tabId === 'materials') renderMaterials();
@@ -620,6 +618,22 @@ function renderTable() {
   const category = document.getElementById('filterCategory').value;
   const month = document.getElementById('filterMonth').value;
 
+  // 单材料查询时，明细表增加「环比」列（与走势图同一套口径）
+  const showMom = !!material;
+  const theadRow = document.querySelector('#dataTable thead tr');
+  if (theadRow) {
+    let momTh = document.getElementById('thMom');
+    if (showMom && !momTh) {
+      momTh = document.createElement('th');
+      momTh.id = 'thMom';
+      momTh.textContent = '环比';
+      theadRow.children[7].after(momTh); // 插在「金额(元)」之后
+    } else if (!showMom && momTh) {
+      momTh.remove();
+    }
+  }
+  const momMap = showMom ? buildMomMap() : null;
+
   let filtered = records.filter(r => {
     if (keyword) {
       const kw = keyword;
@@ -646,8 +660,9 @@ function renderTable() {
 
   const tbody = document.getElementById('tableBody');
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="empty-state">暂无数据，请先录入</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${showMom ? 12 : 11}" class="empty-state">暂无数据，请先录入</td></tr>`;
     document.getElementById('tableFooter').textContent = '';
+    renderOverviewTrend();
     return;
   }
 
@@ -664,6 +679,7 @@ function renderTable() {
       <td>${fmtNum(r.quantity)}</td>
       <td>${displayUnit}</td>
       <td>${fmtNum(r.totalAmount)}</td>
+      ${showMom ? `<td>${renderMomCell(momMap[r.id])}</td>` : ''}
       <td title="${esc(r.supplier) || ''}">${esc(r.supplier) || '—'}</td>
       <td title="${esc(r.remark) || ''}">${esc(r.remark) || '—'}</td>
       <td>
@@ -676,6 +692,7 @@ function renderTable() {
   const totalAmount = filtered.reduce((s, r) => s + r.totalAmount, 0);
   document.getElementById('tableFooter').textContent =
     `共 ${filtered.length} 条记录 | 采购总额：${fmtNum(totalAmount)} 元`;
+  renderOverviewTrend();
 }
 
 function calcMoM(record, sameMaterialRecords) {
@@ -691,6 +708,29 @@ function calcMoM(record, sameMaterialRecords) {
     symbol: pct >= 0 ? '↑' : '↓',
     alert: Math.abs(pct) >= ALERT_THRESHOLD
   };
+}
+
+// 环比映射：每条记录 对比 同材料上一笔价格
+// （基于全部记录计算，不受搜索/供应商/分类/月份筛选影响）
+function buildMomMap() {
+  const byMat = {};
+  records.forEach(r => {
+    if (!byMat[r.materialName]) byMat[r.materialName] = [];
+    byMat[r.materialName].push(r);
+  });
+  const map = {};
+  Object.keys(byMat).forEach(k => {
+    byMat[k].sort((a, b) => a.pricingDate.localeCompare(b.pricingDate));
+    byMat[k].forEach(r => { map[r.id] = calcMoM(r, byMat[k]); });
+  });
+  return map;
+}
+
+// 环比单元格：涨红跌绿（沿用原有视觉语言），超阈值高亮为异常
+function renderMomCell(mom) {
+  if (!mom) return '<span class="mom-flat">—</span>';
+  const cls = mom.alert ? 'mom-up mom-alert' : (mom.direction === 'up' ? 'mom-up' : 'mom-down');
+  return `<span class="${cls}">${mom.symbol}${mom.pct.toFixed(1)}%</span>`;
 }
 
 function sortBy(field) {
@@ -1227,62 +1267,46 @@ function filterBySupplier(name) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// ===== 趋势分析 =====
-function initTrendTab() {
-  const sel = document.getElementById('trendMaterial');
-  const names = [...new Set(records.map(r => r.materialName))].sort();
-  const current = sel.value;
-  sel.innerHTML = '<option value="">请选择原材料</option>' +
-    names.map(n => `<option value="${esc(n)}" ${n === current ? 'selected' : ''}>${esc(n)}</option>`).join('');
+// ===== 数据总览：单材料走势图 =====
+// 在「数据总览」中选定某个原材料时，于明细表下方展示其价格波动走势。
+// 只画单个材料的走势，不提供多品种对比。
+function renderOverviewTrend() {
+  const panel = document.getElementById('overviewTrend');
+  if (!panel) return;
+  const materialName = document.getElementById('filterMaterial').value;
 
-  // 多选checkbox
-  const cbWrap = document.getElementById('multiMaterialCheckboxes');
-  cbWrap.innerHTML = names.map(n =>
-    `<label><input type="checkbox" value="${esc(n)}" onchange="renderCompare()"> ${esc(n)}</label>`
-  ).join('');
-}
-
-function renderTrend() {
-  const multiVisible = document.getElementById('multiCompare').style.display !== 'none';
-  if (multiVisible) {
-    renderCompare();
-    return;
-  }
-
-  const materialName = document.getElementById('trendMaterial').value;
-  const ctx = document.getElementById('trendChart');
-
-  if (trendChartInstance) { trendChartInstance.destroy(); trendChartInstance = null; }
-  document.getElementById('trendStats').innerHTML = '';
-  document.getElementById('trendDetail').innerHTML = '';
-
+  // 未选定具体材料：隐藏走势面板
   if (!materialName) {
-    ctx.parentElement.innerHTML = '<div class="empty-state">请在右上角选择原材料查看趋势</div>';
+    panel.style.display = 'none';
+    if (overviewTrendChartInstance) { overviewTrendChartInstance.destroy(); overviewTrendChartInstance = null; }
     return;
   }
 
-  // 恢复canvas
-  if (!ctx || ctx.tagName !== 'CANVAS') {
-    document.querySelector('#singleTrend .chart-container').innerHTML = '<canvas id="trendChart"></canvas>';
-  }
-
+  // 走势基于该材料的全部记录，不受搜索/供应商/分类/月份筛选影响
   const materialRecords = records
     .filter(r => r.materialName === materialName)
     .sort((a, b) => a.pricingDate.localeCompare(b.pricingDate));
 
+  panel.style.display = '';
+  document.getElementById('overviewTrendTitle').textContent = materialName + ' - 价格波动趋势';
+  const m = materials.find(x => x.name === materialName);
+  const subEl = document.getElementById('overviewTrendSub');
+  if (subEl) subEl.textContent = (m && m.unit) ? ('标准单位：' + m.unit) : '单位：未定义';
+
   if (materialRecords.length === 0) {
-    document.querySelector('#singleTrend .chart-container').innerHTML =
-      '<div class="empty-state">该材料暂无数据</div>';
+    if (overviewTrendChartInstance) { overviewTrendChartInstance.destroy(); overviewTrendChartInstance = null; }
+    document.getElementById('overviewTrendStats').innerHTML = '';
+    document.getElementById('overviewTrendDetail').innerHTML =
+      '<div class="empty-state">该材料暂无价格记录，无法绘制走势</div>';
     return;
   }
 
-  drawTrendChart(materialName, materialRecords);
-  renderTrendStats(materialRecords);
-  renderTrendDetail(materialRecords);
+  drawTrendChart('overviewTrendChart', materialName, materialRecords);
+  renderTrendStats(materialRecords, 'overviewTrendStats');
 }
 
-function drawTrendChart(name, data) {
-  const canvas = document.getElementById('trendChart');
+function drawTrendChart(canvasId, name, data) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
@@ -1297,7 +1321,9 @@ function drawTrendChart(name, data) {
     return +(((r.price - prev) / prev) * 100).toFixed(2);
   });
 
-  trendChartInstance = new Chart(ctx, {
+  if (overviewTrendChartInstance) { overviewTrendChartInstance.destroy(); overviewTrendChartInstance = null; }
+
+  overviewTrendChartInstance = new Chart(ctx, {
     type: 'line',
     data: {
       labels: labels,
@@ -1305,8 +1331,8 @@ function drawTrendChart(name, data) {
         {
           label: '单价(元)',
           data: prices,
-          borderColor: '#2563eb',
-          backgroundColor: 'rgba(37,99,235,0.08)',
+          borderColor: '#3457b5',
+          backgroundColor: 'rgba(52,87,181,0.08)',
           borderWidth: 2,
           fill: true,
           tension: 0.3,
@@ -1368,7 +1394,7 @@ function drawTrendChart(name, data) {
   });
 }
 
-function renderTrendStats(data) {
+function renderTrendStats(data, targetId) {
   const prices = data.map(r => r.price);
   const latest = data[data.length - 1];
   const first = data[0];
@@ -1382,7 +1408,7 @@ function renderTrendStats(data) {
 
   const momClass = totalPct >= 0 ? 'up' : 'down';
 
-  document.getElementById('trendStats').innerHTML = `
+  document.getElementById(targetId).innerHTML = `
     <div class="stat-box"><div class="label">最新单价</div><div class="value">${fmtPrice(latest.price)} 元</div></div>
     <div class="stat-box"><div class="label">期初单价</div><div class="value">${fmtPrice(first.price)} 元</div></div>
     <div class="stat-box"><div class="label">累计涨跌</div><div class="value ${momClass}">${totalPct >= 0 ? '↑' : '↓'}${Math.abs(totalPct).toFixed(1)}%</div></div>
@@ -1393,141 +1419,6 @@ function renderTrendStats(data) {
     <div class="stat-box"><div class="label">累计采购额</div><div class="value">${fmtNum(totalAmount)} 元</div></div>
   `;
 }
-
-function renderTrendDetail(data) {
-  const rows = data.map((r, i) => {
-    let momHtml = '<span class="mom-flat">—</span>';
-    if (i > 0) {
-      const prev = data[i - 1].price;
-      if (prev > 0) {
-        const pct = ((r.price - prev) / prev * 100);
-        const cls = Math.abs(pct) >= ALERT_THRESHOLD ? 'mom-up mom-alert' : (pct >= 0 ? 'mom-up' : 'mom-down');
-        momHtml = `<span class="${cls}">${pct >= 0 ? '↑' : '↓'}${Math.abs(pct).toFixed(1)}%</span>`;
-      }
-    }
-    return `<tr>
-      <td>${r.pricingDate}</td>
-      <td>${esc(r.supplyDate) || '—'}</td>
-      <td>${fmtPrice(r.price)}</td>
-      <td>${fmtNum(r.quantity)} ${r.unit}</td>
-      <td>${fmtNum(r.totalAmount)}</td>
-      <td>${momHtml}</td>
-      <td>${esc(r.supplier) || '—'}</td>
-      <td>${esc(r.remark) || '—'}</td>
-    </tr>`;
-  }).reverse().join('');
-
-  document.getElementById('trendDetail').innerHTML = `
-    <table class="data-table" style="border:1px solid var(--border); border-radius:6px;">
-      <thead><tr>
-        <th>定价时间</th><th>供货时间</th><th>单价(元)</th><th>数量</th><th>金额(元)</th><th>环比</th><th>供应商</th><th>备注</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
-}
-
-// ===== 多材料对比 =====
-function toggleMultiCompare() {
-  const single = document.getElementById('singleTrend');
-  const multi = document.getElementById('multiCompare');
-  const btn = document.getElementById('multiCompareBtn');
-  if (multi.style.display === 'none') {
-    multi.style.display = 'block';
-    single.style.display = 'none';
-    btn.textContent = '单材料趋势';
-    renderCompare();
-  } else {
-    multi.style.display = 'none';
-    single.style.display = 'block';
-    btn.textContent = '多材料对比';
-    renderTrend();
-  }
-}
-
-function renderCompare() {
-  const checked = [...document.querySelectorAll('#multiMaterialCheckboxes input:checked')].slice(0, 5).map(cb => cb.value);
-
-  if (compareChartInstance) { compareChartInstance.destroy(); compareChartInstance = null; }
-  document.getElementById('compareTableWrap').innerHTML = '';
-
-  if (checked.length === 0) {
-    return;
-  }
-
-  const ctx = document.getElementById('compareChart').getContext('2d');
-  const colors = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed'];
-
-  // 收集所有月份
-  const allMonths = new Set();
-  const series = checked.map((name, i) => {
-    const data = records.filter(r => r.materialName === name).sort((a, b) => a.pricingDate.localeCompare(b.pricingDate));
-    data.forEach(r => allMonths.add(r.pricingDate));
-    return { name, color: colors[i], data };
-  });
-
-  const sortedMonths = [...allMonths].sort();
-
-  const datasets = series.map(s => {
-    const map = {};
-    s.data.forEach(r => { map[r.pricingDate] = r.price; });
-    return {
-      label: s.name,
-      data: sortedMonths.map(m => map[m] || null),
-      borderColor: s.color,
-      backgroundColor: s.color + '20',
-      borderWidth: 2,
-      tension: 0.3,
-      pointRadius: 4,
-      fill: false
-    };
-  });
-
-  compareChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: { labels: sortedMonths, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        title: { display: true, text: '多材料价格对比', font: { size: 16, weight: 'bold' } }
-      },
-      scales: {
-        y: { title: { display: true, text: '单价(元)' }, beginAtZero: false }
-      }
-    }
-  });
-
-  // 对比表
-  const tableRows = series.map(s => {
-    const prices = s.data.map(r => r.price);
-    if (prices.length === 0) return '';
-    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-    const first = s.data[0].price;
-    const last = s.data[s.data.length - 1].price;
-    const pct = first ? ((last - first) / first * 100) : 0;
-    const cls = pct >= 0 ? 'mom-up' : 'mom-down';
-    return `<tr>
-      <td><strong>${esc(s.name)}</strong></td>
-      <td>${fmtPrice(last)}</td>
-      <td>${fmtPrice(first)}</td>
-      <td class="${cls}">${pct >= 0 ? '↑' : '↓'}${Math.abs(pct).toFixed(1)}%</td>
-      <td>${fmtPrice(avg)}</td>
-      <td>${fmtPrice(Math.max(...prices))}</td>
-      <td>${fmtPrice(Math.min(...prices))}</td>
-    </tr>`;
-  }).join('');
-
-  document.getElementById('compareTableWrap').innerHTML = `
-    <table class="data-table" style="border:1px solid var(--border); border-radius:6px;">
-      <thead><tr>
-        <th>原材料</th><th>最新价</th><th>期初价</th><th>累计变动</th><th>均价</th><th>最高价</th><th>最低价</th>
-      </tr></thead>
-      <tbody>${tableRows}</tbody>
-    </table>
-  `;
-}
-
 // ===== 统计概览 =====
 function renderStats() {
   const totalRecords = records.length;
@@ -1780,10 +1671,6 @@ function refreshAll() {
   refreshMaterialFilter(categoryFilter);
   refreshSupplierFilter();
   renderTable();
-  if (document.getElementById('tab-trend').classList.contains('active')) {
-    initTrendTab();
-    renderTrend();
-  }
   if (document.getElementById('tab-stats').classList.contains('active')) {
     renderStats();
   }
