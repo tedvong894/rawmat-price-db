@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.10.31-a';
+const APP_VERSION = '2026.10.31-b';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -619,7 +619,8 @@ function renderTable() {
   const month = document.getElementById('filterMonth').value;
 
   // 单材料查询时，明细表增加「环比」列（与走势图同一套口径）
-  const showMom = !!material;
+  // 触发条件：下拉框选定单一材料，或搜索/筛选后结果恰好收敛到单一材料
+  const showMom = !!getActiveTrendMaterial();
   const theadRow = document.querySelector('#dataTable thead tr');
   if (theadRow) {
     let momTh = document.getElementById('thMom');
@@ -1270,12 +1271,38 @@ function filterBySupplier(name) {
 // ===== 数据总览：单材料走势图 =====
 // 在「数据总览」中选定某个原材料时，于明细表下方展示其价格波动走势。
 // 只画单个材料的走势，不提供多品种对比。
+// 走势图 / 环比列的「当前材料」判定：
+// 1) 下拉框已选定单一材料 -> 直接用；
+// 2) 否则若搜索 / 筛选后结果恰好收敛到单一材料 -> 也展示走势（搜索框输入材料名即触发）；
+// 3) 否则（多材料或空结果）-> 不展示。
+function getActiveTrendMaterial() {
+  const material = document.getElementById('filterMaterial').value;
+  if (material) return material;
+  const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+  const supplier = document.getElementById('filterSupplier').value;
+  const category = document.getElementById('filterCategory').value;
+  const month = document.getElementById('filterMonth').value;
+  const inScope = records.filter(r => {
+    if (keyword) {
+      const hitName = (r.materialName || '').toLowerCase().includes(keyword);
+      const hitSupplier = (r.supplier || '').toLowerCase().includes(keyword);
+      if (!hitName && !hitSupplier) return false;
+    }
+    if (supplier && (r.supplier || '') !== supplier) return false;
+    if (category && r.category !== category) return false;
+    if (month && !r.pricingDate.startsWith(month)) return false;
+    return true;
+  });
+  const distinct = [...new Set(inScope.map(r => r.materialName))];
+  return distinct.length === 1 ? distinct[0] : null;
+}
+
 function renderOverviewTrend() {
   const panel = document.getElementById('overviewTrend');
   if (!panel) return;
-  const materialName = document.getElementById('filterMaterial').value;
+  const materialName = getActiveTrendMaterial();
 
-  // 未选定具体材料：隐藏走势面板
+  // 未收敛到具体材料：隐藏走势面板
   if (!materialName) {
     panel.style.display = 'none';
     if (overviewTrendChartInstance) { overviewTrendChartInstance.destroy(); overviewTrendChartInstance = null; }
