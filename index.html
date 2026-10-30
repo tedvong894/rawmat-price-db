@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="原料价格">
-  <link rel="stylesheet" href="style.css?v=2026.09.19-a">
+  <link rel="stylesheet" href="style.css?v=2026.10.30-a">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
 </head>
@@ -18,23 +18,26 @@
     <!-- 顶部栏 -->
     <header class="header">
       <div class="header-left">
-        <h1>📊 原材料价格数据库</h1>
-        <span class="subtitle">内审专用 · 价格波动监控</span>
+        <div class="brand-mark">原</div>
+        <div class="header-titles">
+          <h1>原材料价格数据库</h1>
+          <span class="subtitle">内审专用 · 价格波动监控</span>
+        </div>
       </div>
       <div class="header-right">
-        <button class="btn btn-sm btn-ghost" id="installBtn" onclick="showInstall()" style="display:none;">⬇ 安装到本地</button>
+        <button class="btn btn-sm btn-ghost" id="installBtn" onclick="showInstall()" style="display:none;">安装到本地</button>
       </div>
     </header>
 
     <!-- Tab导航 -->
     <nav class="tabs">
-      <button class="tab active" data-tab="entry" onclick="switchTab('entry')">📝 数据录入</button>
-      <button class="tab" data-tab="list" onclick="switchTab('list')">📋 数据总览</button>
-      <button class="tab" data-tab="trend" onclick="switchTab('trend')">📈 趋势分析</button>
-      <button class="tab" data-tab="stats" onclick="switchTab('stats')">📊 统计概览</button>
-      <button class="tab" data-tab="suppliers" onclick="switchTab('suppliers')">🏢 供应商库</button>
-      <button class="tab" data-tab="materials" onclick="switchTab('materials')">📦 材料库</button>
-      <button class="tab" data-tab="pricelib" onclick="switchTab('pricelib')">💰 价格信息库</button>
+      <button class="tab active" data-tab="entry" onclick="switchTab('entry')">数据录入</button>
+      <button class="tab" data-tab="list" onclick="switchTab('list')">数据总览</button>
+      <button class="tab" data-tab="trend" onclick="switchTab('trend')">趋势分析</button>
+      <button class="tab" data-tab="stats" onclick="switchTab('stats')">统计概览</button>
+      <button class="tab" data-tab="suppliers" onclick="switchTab('suppliers')">供应商库</button>
+      <button class="tab" data-tab="materials" onclick="switchTab('materials')">材料库</button>
+      <button class="tab" data-tab="pricelib" onclick="switchTab('pricelib')">价格信息库</button>
     </nav>
 
     <!-- ============ 数据录入 ============ -->
@@ -112,9 +115,9 @@
             </div>
           </div>
           <div class="form-row form-actions">
-            <button type="submit" class="btn btn-primary" id="submitBtn">💾 保存</button>
+            <button type="submit" class="btn btn-primary" id="submitBtn">保存</button>
             <button type="button" class="btn" onclick="resetForm()">清空</button>
-            <button type="button" class="btn btn-danger" id="deleteRecordBtn" onclick="deleteCurrentRecord()" style="display:none;" title="删除当前正在编辑的记录">🗑 删除</button>
+            <button type="button" class="btn btn-danger" id="deleteRecordBtn" onclick="deleteCurrentRecord()" style="display:none;" title="删除当前正在编辑的记录">删除</button>
             <span class="form-hint" id="formHint"></span>
           </div>
         </form>
@@ -127,7 +130,7 @@
         <div class="card-header">
           <h2>数据总览</h2>
           <div class="filter-bar">
-            <input type="text" id="searchInput" placeholder="🔍 搜索..." oninput="renderTable()">
+            <input type="text" id="searchInput" placeholder="搜索..." oninput="renderTable()">
             <select id="filterMaterial" onchange="onMaterialFilterChange()">
               <option value="">全部原材料</option>
             </select>
@@ -242,7 +245,7 @@
         <div class="card-header">
           <h2>供应商库</h2>
           <div class="filter-bar">
-            <input type="text" id="supplierSearch" placeholder="🔍 搜索供应商..." oninput="renderSuppliers()">
+            <input type="text" id="supplierSearch" placeholder="搜索供应商..." oninput="renderSuppliers()">
           </div>
         </div>
         <div class="stats-grid" id="supplierSummary"></div>
@@ -316,9 +319,9 @@
             </div>
           </div>
           <div class="form-row form-actions">
-            <button type="submit" class="btn btn-primary" id="materialSubmitBtn">💾 保存</button>
+            <button type="submit" class="btn btn-primary" id="materialSubmitBtn">保存</button>
             <button type="button" class="btn" onclick="resetMaterialForm()">清空</button>
-            <button type="button" class="btn btn-danger" id="deleteMaterialBtn" onclick="deleteCurrentMaterial()" style="display:none;" title="删除当前正在编辑的材料定义（不影响价格记录）">🗑 删除</button>
+            <button type="button" class="btn btn-danger" id="deleteMaterialBtn" onclick="deleteCurrentMaterial()" style="display:none;" title="删除当前正在编辑的材料定义（不影响价格记录）">删除</button>
             <span class="form-hint" id="materialFormHint"></span>
           </div>
         </form>
@@ -328,7 +331,7 @@
         <div class="card-header">
           <h2>材料库</h2>
           <div class="filter-bar">
-            <input type="text" id="materialSearch" placeholder="🔍 搜索材料..." oninput="renderMaterials()">
+            <input type="text" id="materialSearch" placeholder="搜索材料..." oninput="renderMaterials()">
           </div>
         </div>
         <div class="stats-grid" id="materialSummary"></div>
@@ -377,7 +380,7 @@
               </div>
             </div>
             <div class="form-row form-actions">
-              <button type="submit" class="btn btn-primary" id="plSubmitBtn">💾 保存手工价格</button>
+              <button type="submit" class="btn btn-primary" id="plSubmitBtn">保存手工价格</button>
               <button type="button" class="btn" onclick="resetPriceLibForm()">清空</button>
               <span class="form-hint" id="priceLibFormHint"></span>
             </div>
@@ -389,7 +392,7 @@
           <div class="card-header">
             <h2>价格信息库</h2>
             <div class="filter-bar">
-              <input type="text" id="priceLibSearch" placeholder="🔍 搜索材料/供应商..." oninput="renderPriceLibrary()">
+              <input type="text" id="priceLibSearch" placeholder="搜索材料/供应商..." oninput="renderPriceLibrary()">
             </div>
           </div>
           <div class="stats-grid" id="priceLibSummary"></div>
@@ -457,7 +460,7 @@
   <!-- 安装引导弹窗 -->
   <div class="modal-mask" id="installModal" style="display:none;">
     <div class="modal">
-      <h3>📲 安装到本地（Mac）</h3>
+      <h3>安装到本地（Mac）</h3>
       <div id="installGuideSafari" style="display:none;">
         <p>你的浏览器（Safari）需要通过系统菜单安装：</p>
         <ol class="guide-steps">
@@ -492,7 +495,7 @@
   <!-- Toast提示 -->
   <div class="toast" id="toast"></div>
 
-  <script src="seed-data.js?v=2026.09.19-a"></script>
-  <script src="app.js?v=2026.10.20-a"></script>
+  <script src="seed-data.js?v=2026.10.30-a"></script>
+  <script src="app.js?v=2026.10.30-a"></script>
 </body>
 </html>
