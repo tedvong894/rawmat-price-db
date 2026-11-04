@@ -1,7 +1,7 @@
 /* ===== 原材料价格数据库 - 核心逻辑 ===== */
 
 // 版本号：每次发布新功能都改这里，用于前端自我诊断（页脚可见）
-const APP_VERSION = '2026.10.31-c';
+const APP_VERSION = '2026.11.04-a';
 
 // ===== 数据层 =====
 const STORE_KEY = 'rawMaterialPriceDB';
@@ -112,8 +112,9 @@ function onPricingDateManualEdit() {
 // 开启需先在 Supabase SQL 编辑器执行本页源码末尾的建表语句（表 rawmat_state）。
 const SYNCSB = {
   enabled: localStorage.getItem('rm_sync_enabled') === '1',
+  auto: false,   // 本地优先 + 手动同步：保存不自动推云端、不轮询/切前台自动拉；仅「手动同步」按钮才与云端交互
   url: 'https://gcwehwqcccmjxrqtolev.supabase.co',
-  anon: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdjd2Vod3FjY2NtanhycXRvbGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQzNDAsImV4cCI6MjEwMDE5MDM0MH0.X0X-75d1wPSTXECZDRVtkWVyDaj9ot9JLp_Qc2YamB8',
+  anon: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiOiJzdXdjd2Vod3FjY2NtanhycXRvbGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQzNDAsImV4cCI6MjEwMDE5MDM0MH0.X0X-75d1wPSTXECZDRVtkWVyDaj9ot9JLp_Qc2YamB8',
   board: 'rm_audit_3f7a9c2d1b8e4f60',
   table: 'rawmat_state'
 };
@@ -243,7 +244,7 @@ function applySyncPayload(p) {
 }
 
 function schedulePush() {
-  if (!SYNCSB.enabled) return;
+  if (!SYNCSB.enabled || !SYNCSB.auto) return;   // 手动模式(auto:false)：保存不自动推云端
   if (!sbClient()) return;
   clearTimeout(_pushTimer);
   _pushTimer = setTimeout(pushState, 700);
@@ -313,14 +314,8 @@ async function pullState() {
 
 function startSync() {
   if (!SYNCSB.enabled) { setSyncState('未开启'); return; }
-  // 等 supabase 库就绪后再开始轮询（避免 async 脚本尚未加载时静默失败）
-  sbReadyPromise().then(() => {
-    pullState();
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') pullState();
-    });
-    setInterval(pullState, 30000);
-  });
+  // 手动模式：仅确认 supabase 就绪，不做任何自动拉取/轮询（用户点「手动同步」才交互）
+  sbReadyPromise().then(() => { if (SYNCSB.enabled) setSyncState('本地优先·手动同步'); });
 }
 
 function toggleSync() {
@@ -661,7 +656,7 @@ function renderTable() {
 
   const tbody = document.getElementById('tableBody');
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${showMom ? 12 : 11}" class="empty-state">暂无数据，请先录入</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${showMom ? 13 : 12}" class="empty-state">暂无数据，请先录入</td></tr>`;
     document.getElementById('tableFooter').textContent = '';
     renderOverviewTrend();
     return;
@@ -683,6 +678,7 @@ function renderTable() {
       ${showMom ? `<td>${renderMomCell(momMap[r.id])}</td>` : ''}
       <td title="${esc(r.supplier) || ''}">${esc(r.supplier) || '—'}</td>
       <td title="${esc(r.remark) || ''}">${esc(r.remark) || '—'}</td>
+      <td>${fmtDateTime(r.createdAt)}</td>
       <td>
         <button class="btn-link" onclick="editRecord('${r.id}')">编辑</button>
       </td>
@@ -1687,6 +1683,15 @@ function fmtPrice(n) {
 function esc(s) {
   if (!s) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// 录入时间：ISO(UTC) -> 本地可读 "YYYY-MM-DD HH:mm"（缺省显示 —）
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const p = (x) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 // ===== 刷新 =====
